@@ -35,6 +35,27 @@ func (m *MysqlDao) QueryUserByName(username string) (*User, error) {
 	}
 }
 
+func (m *MysqlDao) QueryUserByID(id int64) (*User, error) {
+	m.db.AutoMigrate(&User{})
+	// new(T) 分配了零值填充的 T 类型的内存空间，并且返回其地址，一个 *T 类型的值
+	user := new(User)
+
+	err := m.db.Where("id=?", id).First(user).Error
+	if err == nil {
+		// 在数据库中找到该用户
+		return user, nil
+	} else {
+		// 错误为未查询到记录
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		} else {
+			// 数据库过程查询出错
+			log.Println(err)
+			return nil, err
+		}
+	}
+}
+
 func (m *MysqlDao) AddUser(username, password string) (*User, error) {
 	m.db.AutoMigrate(&User{})
 	user := new(User)
@@ -47,18 +68,3 @@ func (m *MysqlDao) AddUser(username, password string) (*User, error) {
 	}
 	return user, nil
 }
-
-// func (m *MysqlDao) QueryUser{
-// 	dao.SqlSession.AutoMigrate(&model.User{})
-// 	user := new(model.User)
-// 	err := dao.SqlSession.Where("username=? and password=?", username, password).First(user).Error
-// 	// 这样的记录不存在，说明密码不正确
-// 	if errors.Is(err, gorm.ErrRecordNotFound) {
-// 		return nil, false
-// 	}
-// 	if err != nil {
-// 		// 数据库查询步骤出错
-// 		return nil, false
-// 	}
-// 	return user, true
-// }

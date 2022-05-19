@@ -2,6 +2,7 @@ package main
 
 import (
 	"mini-tiktok/controller"
+	"mini-tiktok/middleware"
 
 	"github.com/gin-gonic/gin"
 )
@@ -14,7 +15,7 @@ func initRouter(r *gin.Engine) {
 
 	// basic apis
 	// apiRouter.GET("/feed/", controller.Feed)
-	// apiRouter.GET("/user/", controller.UserInfo)
+	apiRouter.GET("/user/", middleware.JWTAuthMiddleware, controller.UserInfo)
 	apiRouter.POST("/user/register/", controller.Register)
 	apiRouter.POST("/user/login/", controller.Login)
 	// apiRouter.POST("/publish/action/", controller.Publish)

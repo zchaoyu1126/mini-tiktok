@@ -3,6 +3,7 @@ package middleware
 import (
 	"fmt"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/golang-jwt/jwt"
@@ -14,7 +15,7 @@ import (
 // 我们需要额外记录一个username和id字段，所以要自定义结构体
 // 如果想要保存更多信息，都可以添加到这个结构体中
 type MyCustomClaims struct {
-	Id       int64  `json:"id"`
+	ID       int64  `json:"id"`
 	Username string `json:"username"`
 	jwt.StandardClaims
 }
@@ -47,9 +48,10 @@ func ParseToken(signToken string) (*MyCustomClaims, error) {
 
 // 基于JWT的认证中间件
 func JWTAuthMiddleware(c *gin.Context) {
-	fmt.Println("hi")
 	// 从请求头中取出
 	// signToken := c.Request.Header.Get("Authorization")
+	idStr := c.Query("user_id")
+	id, _ := strconv.ParseInt(idStr, 10, 64)
 	signToken := c.Query("token")
 	if signToken == "" {
 		c.JSON(http.StatusOK, gin.H{
@@ -71,7 +73,7 @@ func JWTAuthMiddleware(c *gin.Context) {
 		return
 	}
 	// 将用户的id放在到请求的上下文c上
-	c.Set("userid", myclaims.Id)
-	c.Next() // 后续的处理函数可以用过c.Get("userid")来获取当前请求的id
-
+	c.Set("id", id)
+	c.Set("callerid", myclaims.ID)
+	c.Next() // 后续的处理函数可以用过c.Get("id")来获取当前请求的id
 }

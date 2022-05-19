@@ -1,6 +1,7 @@
 package controller
 
 import (
+	"fmt"
 	"mini-tiktok/service"
 	"net/http"
 
@@ -108,32 +109,30 @@ func Login(c *gin.Context) {
 	})
 }
 
-// func UserInfo(c *gin.Context) {
-// 	// 在查询之前还需要判断用户是否存在
-// 	data, _ := c.Get("userid")
-// 	id, _ := data.(int64)
-// 	user := service.UserInfo(id)
-// 	fmt.Println(user.FollowCount, user.FollowerCount)
-// 	userFrontEnd := User{
-// 		ID:            user.ID,
-// 		UserName:      user.UserName,
-// 		FollowCount:   user.FollowCount,
-// 		FollowerCount: user.FollowCount,
-// 		IsFollow:      user.IsFollow,
-// 	}
+func UserInfo(c *gin.Context) {
+	data, _ := c.Get("id")
+	id, ok := data.(int64)
+	fmt.Println(data, id, ok)
+	data, _ = c.Get("callerid")
+	callerID, _ := data.(int64)
 
-// 	c.JSON(http.StatusOK, UserInfoResponse{
-// 		Response: Response{StatusCode: 0, StatusMsg: "success"},
-// 		User:     userFrontEnd,
-// 	})
-// 	// if user, exist := usersLoginInfo[token]; exist {
-// 	// 	c.JSON(http.StatusOK, UserResponse{
-// 	// 		Response: Response{StatusCode: 0},
-// 	// 		User:     user,
-// 	// 	})
-// 	// } else {
-// 	// 	c.JSON(http.StatusOK, UserResponse{
-// 	// 		Response: Response{StatusCode: 1, StatusMsg: "User doesn't exist"},
-// 	// 	})
-// 	// }
-// }
+	userInfomation, err := service.UserInfo(id, callerID)
+	if err != nil {
+		c.JSON(http.StatusOK, UserInfoResponse{
+			Response: Response{StatusCode: 1, StatusMsg: err.Error()},
+		})
+		return
+	}
+
+	user := User{
+		ID:            userInfomation.ID,
+		UserName:      userInfomation.UserName,
+		FollowCount:   userInfomation.FollowCount,
+		FollowerCount: userInfomation.FollowCount,
+		IsFollow:      userInfomation.IsFollow,
+	}
+	c.JSON(http.StatusOK, UserInfoResponse{
+		Response: Response{StatusCode: 0, StatusMsg: "success"},
+		User:     user,
+	})
+}

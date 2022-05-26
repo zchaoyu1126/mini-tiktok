@@ -15,7 +15,7 @@ func initRouter(r *gin.Engine) {
 
 	// basic apis
 	// apiRouter.GET("/feed/", controller.Feed)
-	apiRouter.GET("/user/", middleware.JWTAuthMiddleware, controller.UserInfo)
+	apiRouter.GET("/user/", middleware.UserAuthMiddleware("Query"), controller.UserInfo)
 	apiRouter.POST("/user/register/", controller.Register)
 	apiRouter.POST("/user/login/", controller.Login)
 	// apiRouter.POST("/publish/action/", controller.Publish)
@@ -28,7 +28,7 @@ func initRouter(r *gin.Engine) {
 	// apiRouter.GET("/comment/list/", controller.CommentList)
 
 	// extra apis - II
-	// apiRouter.POST("/relation/action/", controller.RelationAction)
+	apiRouter.POST("/relation/action/", middleware.UserAuthMiddleware("Query"), controller.RelationAction)
 	// apiRouter.GET("/relation/follow/list/", controller.FollowList)
 	// apiRouter.GET("/relation/follower/list/", controller.FollowerList)
 }

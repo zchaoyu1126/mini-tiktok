@@ -1,14 +1,13 @@
 package controller
 
 import (
-	"fmt"
+	"mini-tiktok/repository"
 	"mini-tiktok/service"
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 )
-
-// 需要做一个缓存来记录用户是否存在，用redis缓存
 
 type User struct {
 	ID            int64  `json:"id"`
@@ -33,10 +32,9 @@ func Register(c *gin.Context) {
 	username := c.Query("username")
 	password := c.Query("password")
 
-	// should redis check wheather this user has already existed
-	exist, err := service.CheckUserExist(username)
+	// query redis to check wheather this user has already existed or not
+	exist, err := repository.NewRedisDaoInstance().IsUserNameExist(username)
 	if err != nil {
-		// 处理service层传递上来的错误
 		c.JSON(http.StatusOK, UserLoginResponse{
 			Response: Response{StatusCode: 2, StatusMsg: err.Error()},
 			UserId:   -1,
@@ -74,7 +72,7 @@ func Login(c *gin.Context) {
 	password := c.Query("password")
 
 	// should redis check wheather this user has already existed
-	exist, err := service.CheckUserExist(username)
+	exist, err := repository.NewRedisDaoInstance().IsUserNameExist(username)
 	if err != nil {
 		c.JSON(http.StatusOK, UserLoginResponse{
 			Response: Response{StatusCode: 1, StatusMsg: err.Error()},
@@ -110,13 +108,13 @@ func Login(c *gin.Context) {
 }
 
 func UserInfo(c *gin.Context) {
-	data, _ := c.Get("id")
-	id, ok := data.(int64)
-	fmt.Println(data, id, ok)
-	data, _ = c.Get("callerid")
-	callerID, _ := data.(int64)
+	toUserIDTmp := c.Query("user_id")
+	toUserID, _ := strconv.ParseInt(toUserIDTmp, 10, 64)
 
-	userInfomation, err := service.UserInfo(id, callerID)
+	fromUserIDTmp, _ := c.Get("fromUserID")
+	fromUserID, _ := fromUserIDTmp.(int64)
+
+	userInfomation, err := service.UserInfo(toUserID, fromUserID)
 	if err != nil {
 		c.JSON(http.StatusOK, UserInfoResponse{
 			Response: Response{StatusCode: 1, StatusMsg: err.Error()},
@@ -128,7 +126,7 @@ func UserInfo(c *gin.Context) {
 		ID:            userInfomation.ID,
 		UserName:      userInfomation.UserName,
 		FollowCount:   userInfomation.FollowCount,
-		FollowerCount: userInfomation.FollowCount,
+		FollowerCount: userInfomation.FollowerCount,
 		IsFollow:      userInfomation.IsFollow,
 	}
 	c.JSON(http.StatusOK, UserInfoResponse{

@@ -1,5 +1,13 @@
-url: 127.0.0.1
-username: root
-password: cxDgTq9K
-dbname: mini_tiktok
-post: 3306
+# mysql config
+mysql_host: 127.0.0.1
+mysql_username: root
+mysql_password: root
+# password: cxDgTq9K
+mysql_dbname: mini_tiktok
+mysql_port: 3306
+
+# redis config
+redis_host: 127.0.0.1
+redis_port: 6379
+redis_dbname:
+redis_password: 0

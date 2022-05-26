@@ -3,20 +3,23 @@ package service
 import (
 	"errors"
 	"fmt"
-	"mini-tiktok/middleware"
 	"mini-tiktok/repository"
+	"mini-tiktok/utils"
+
+	"gorm.io/gorm"
 )
 
-type UserInformation struct {
-	ID            int64
-	UserName      string
-	FollowCount   int64
-	FollowerCount int64
-	IsFollow      bool
+type UserView struct {
+	ID            int64  `json:"id"`
+	UserName      string `json:"name"`
+	FollowCount   int64  `json:"follow_count"`
+	FollowerCount int64  `json:"follower_count"`
+	IsFollow      bool   `json:"is_follow"`
 }
 
+// CheckUserExist query mysql to check if the username has appeared.
 func CheckUserExist(username string) (bool, error) {
-	user, err := repository.NewDaoInstance().QueryUserByName(username)
+	user, err := repository.NewMysqlDaoInstance().QueryUserByName(username)
 	if err != nil {
 		return false, err
 	} else if user == nil {
@@ -25,67 +28,100 @@ func CheckUserExist(username string) (bool, error) {
 	return true, nil
 }
 
+// Before register, controller has checked wheather username exist.
+// If registation success, return userID, token, nil, otherwise return -1, "", err.
 func Register(username, password string) (int64, string, error) {
-	// 需要对password使用哈希加密，不能直接存password
-	// 之后完善
+	// check username and password and sql injection attack
 	if username == "" {
 		return -1, "", errors.New("invaild username")
+	} else if len(username) > 32 || len(password) > 32 {
+		return -1, "", errors.New("username or password too long")
 	}
-	encodePassword := Encryption(password)
-	user, err := repository.NewDaoInstance().AddUser(username, encodePassword)
+
+	// encrypt password and then store into mysql
+	encodePassword := encrypt(password)
+	user, err := repository.NewMysqlDaoInstance().AddUser(username, encodePassword)
 	if err != nil {
 		return -1, "", err
 	}
-	claims := middleware.MyCustomClaims{ID: user.ID, Username: user.UserName}
-	token, _ := middleware.GenerateToken(claims)
-	return user.ID, token, nil
+
+	// store namelist username into redis
+	err = repository.NewRedisDaoInstance().AddToNameList(user.UserName)
+	if err != nil {
+		return -1, "", err
+	}
+
+	// store (token, userID) into redis
+	token := utils.GenerateToken(user.UserID)
+	err = repository.NewRedisDaoInstance().SetToken(token, user.UserID)
+	if err != nil {
+		return -1, "", err
+	}
+	return user.UserID, token, nil
 }
 
-// Login之前已经判断过是否存在该用户
+// Before login, controller has checked wheather username exist.
+// If login success, return userID, token, nil, otherwise return -1, "", err.
 func Login(username, password string) (int64, string, error) {
-	user, err := repository.NewDaoInstance().QueryUserByName(username)
+	// check username and password and sql injection attack
+
+	user, err := repository.NewMysqlDaoInstance().QueryUserByName(username)
 	if err != nil {
 		return -1, "", err
 	}
-	decodePassword := Decryption(user.Password)
+
+	// decrypt the string stored in mysql
+	decodePassword := decrypt(user.Password)
 	if decodePassword != password {
 		return -1, "", errors.New("wrong password")
 	}
-	claims := middleware.MyCustomClaims{ID: user.ID, Username: user.UserName}
-	token, _ := middleware.GenerateToken(claims)
-	return user.ID, token, nil
+
+	token := utils.GenerateToken(user.UserID)
+	repository.NewRedisDaoInstance().SetToken(token, user.UserID)
+	return user.UserID, token, nil
 }
 
-func UserInfo(id, callerID int64) (*UserInformation, error) {
-	// 检查id是否合法
-	userInformation := new(UserInformation)
-	if id < 0 {
-		return nil, errors.New("invaild id")
-	}
+// fromUserID wants to look over toUserID's user information.
+func UserInfo(toUserID, fromUserID int64) (*UserView, error) {
+	// check toUserID and fromUserID
 
-	// 向数据库中查询ID和用户名
-	fmt.Println(id, callerID)
-	user, err := repository.NewDaoInstance().QueryUserByID(id)
+	userView := new(UserView)
+	user, err := repository.NewMysqlDaoInstance().QueryUserByID(toUserID)
 
-	if user == nil && err == nil {
+	if errors.Is(err, gorm.ErrRecordNotFound) {
 		return nil, errors.New("user id doesn't exist")
 	}
-	fmt.Println(id, callerID, user)
-	userInformation.ID = user.ID
-	userInformation.UserName = user.UserName
-	// 向数据库中查询follow_count
-	userInformation.FollowCount = 0
-	// 向数据库中查询follower_count
-	userInformation.FollowerCount = 0
-	// 向数据库中查询id与callerID之间的关系
-	userInformation.IsFollow = false
-	return userInformation, nil
+	if err != nil {
+		return nil, err
+	}
+
+	// query like table, check fromUserID is follow toUserID or not
+	var isFollow bool
+	fmt.Println(fromUserID, toUserID, fromUserID == toUserID)
+	if fromUserID == toUserID {
+		isFollow = false
+	} else {
+		isFollow, err = repository.NewMysqlDaoInstance().IsFollow(fromUserID, toUserID)
+	}
+
+	if err != nil {
+		return nil, err
+	}
+
+	userView.ID = user.UserID
+	userView.UserName = user.UserName
+	userView.FollowCount = user.FollowCount
+	userView.FollowerCount = user.FollowerCount
+	userView.IsFollow = isFollow
+	return userView, nil
 }
 
-func Encryption(str string) string {
+// use base64 encrypt password
+func encrypt(str string) string {
 	return str
 }
 
-func Decryption(str string) string {
+// use base64 decrypt password
+func decrypt(str string) string {
 	return str
 }

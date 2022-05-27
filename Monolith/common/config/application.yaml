@@ -1,8 +1,8 @@
 # mysql config
 mysql_host: 127.0.0.1
 mysql_username: root
-mysql_password: root
-# password: cxDgTq9K
+# mysql_password: root
+mysql_password: cxDgTq9K
 mysql_dbname: mini_tiktok
 mysql_port: 3306
 

@@ -41,7 +41,7 @@ The mysql installation tutorial is omitted here.
 
 Notice: you need replace the `mysql_word` with your own password.
 
-![image-20220527204317266](.\assets\image-20220527204317266.png)
+![image-20220527204317266](./assets/mysql.png)
 
 
 

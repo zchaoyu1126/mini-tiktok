@@ -16,7 +16,7 @@ func FavouriteAdd(favourite *entity.Favourite) error {
 
 func FavouriteGetByVideoUser(favourite *entity.Favourite, uid int64, vid int64) error {
 	mysqlDB.AutoMigrate(&entity.Favourite{})
-	err := mysqlDB.Where("user_id=?", uid).Where("video_id=?", vid).First(favourite).Error
+	err := mysqlDB.Where("user_id=?", uid).Where("video_id=?", vid).Find(&favourite).Error
 	if err != nil {
 		log.Println(err)
 	}

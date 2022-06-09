@@ -3,24 +3,43 @@ package service
 import (
 	"mini-tiktok/app/dao"
 	"mini-tiktok/app/entity"
+	"mini-tiktok/common/utils"
+	"mini-tiktok/common/xerr"
 )
 
-type PublicationVo struct {
-	ID             int64
-	Author         entity.User
-	PlayUrl        string
+type PublicationVO struct {
+	ID             int64   `json:"id"`
+	Author         *UserVO `json:"author"`
+	PlayUrl        string  `json:"play_url"`
 	CoverUrl       string
 	FavouriteCount int
 	CommentCount   int
 	IsFavourite    bool
-	title          string
+	Title          string
 }
 
-func GetVideoListByUser(uid int64) ([]PublicationVo, error) {
+func GetVideoListByUser(toUID, fromUID int64) ([]PublicationVO, error) {
 	var videos []entity.Publication
-	var ret []PublicationVo
-	err := dao.VideoGetByUser(uid, &videos)
-	if err != nil {
+	var ret []PublicationVO
+	// 查询是否关注了该作者
+	isFollow := false
+	if toUID != fromUID {
+		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID}
+		if err := dao.FollowGetByIDs(follow); err != nil {
+			return nil, err
+		}
+		isFollow = follow.IsFollow
+	}
+
+	// 查询作者信息
+	owner := &entity.User{UserID: fromUID}
+	if err := dao.UserGetByUID(owner); err != nil {
+		return nil, err
+	}
+	// 组装UserVO
+	author := &UserVO{owner.ID, owner.UserName, owner.FollowCount, owner.FollowerCount, isFollow}
+
+	if err := dao.VideoGetByUser(toUID, &videos); err != nil {
 		return nil, err
 	}
 
@@ -29,38 +48,69 @@ func GetVideoListByUser(uid int64) ([]PublicationVo, error) {
 		if err != nil {
 			return nil, err
 		}
+		vo.Author = author
 		ret = append(ret, vo)
 	}
-	return ret, err
+	return ret, nil
 }
 
-func VideoPublish(video *entity.Publication) error {
-	err := dao.VideoAdd(video)
+func VideoPublish(filepath, title string, uid int64) error {
+	flake, err := utils.NewSnowFlake(1, 1)
+	if err != nil {
+		return xerr.ErrInternalServer
+	}
+	vid, _ := flake.NextId()
+
+	// 需要生成封面
+	err = dao.VideoAdd(&entity.Publication{
+		VideoID:  vid,
+		OwnerID:  uid,
+		Title:    title,
+		PlayUrl:  filepath,
+		CoverUrl: "",
+	})
+
 	if err != nil {
 		return err
 	}
-	return err
+	return nil
 }
 
-func VideoTransform(v *entity.Publication) (PublicationVo, error) {
-	vo := PublicationVo{
+func VideoTransform(v *entity.Publication) (PublicationVO, error) {
+	vo := PublicationVO{
 		ID:             v.VideoID,
 		PlayUrl:        v.PlayUrl,
 		CoverUrl:       v.CoverUrl,
 		FavouriteCount: v.FavouriteCount,
 		CommentCount:   v.CommentCount,
-		title:          v.Title,
+		Title:          v.Title,
 	}
 	var favourite entity.Favourite
 	err := dao.FavouriteGetByVideoUser(&favourite, v.OwnerID, v.VideoID)
 	if err != nil {
-		return PublicationVo{}, err
+		return PublicationVO{}, err
 	}
 	vo.IsFavourite = favourite.IsFavourite == 1
-	vo.Author.UserID = v.OwnerID
-	err = dao.UserGetByUID(&vo.Author)
-	if err != nil {
-		return PublicationVo{}, err
-	}
 	return vo, err
+}
+
+func Feed(lastest string) (int, []PublicationVO, error) {
+	var videos []entity.Publication
+	var ret []PublicationVO
+	if err := dao.VideoList(&videos); err != nil {
+		return 0, []PublicationVO{}, err
+	}
+	for _, v := range videos {
+		ret = append(ret, PublicationVO{
+			ID:             v.VideoID,
+			PlayUrl:        v.PlayUrl,
+			CoverUrl:       v.CoverUrl,
+			FavouriteCount: v.FavouriteCount,
+			CommentCount:   v.CommentCount,
+			Title:          v.Title,
+			Author:         &UserVO{},
+		})
+	}
+
+	return 0, ret, nil
 }

@@ -8,40 +8,45 @@ import (
 	"gorm.io/gorm"
 )
 
-func RelationAction(fromUserID, toUserID int64, actionType int64) error {
+func RelationAction(fromUID, toUID int64, actionType int64) error {
 	if actionType == 1 {
-		follow := &entity.Follow{FromUserID: fromUserID, ToUserID: toUserID, IsFollow: true}
-		// record already exist
-		if err := dao.FollowGetByIDs(follow); err != nil {
+		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID, IsFollow: true}
+		// 查询记录follow记录是否存在
+		err := dao.FollowGetByIDs(follow)
+		if err != nil {
 			if errors.Is(err, gorm.ErrRecordNotFound) {
-				if err := dao.FollowCreate(follow); err != nil {
-					return err
+				// 如果记录不存在就创建，创建失败则返回nerr，成功则返回nil
+				if nerr := dao.FollowAdd(follow); nerr != nil {
+					return nerr
 				}
+				return nil
 			} else {
+				// 查询失败，返回错误
 				return err
 			}
 		}
-		// update record
+
+		// 记录存在的情况
 		if err := dao.FollowUpdate(follow); err != nil {
 			return err
 		}
-		if err := UpdateUserFollowCount(fromUserID, 1); err != nil {
+		if err := UpdateUserFollowCount(fromUID, 1); err != nil {
 			return err
 		}
-		if err := UpdateUserFollowerCount(toUserID, 1); err != nil {
+		if err := UpdateUserFollowerCount(toUID, 1); err != nil {
 			return err
 		}
 		return nil
 	} else if actionType == 2 {
-		// update record
-		follow := &entity.Follow{FromUserID: fromUserID, ToUserID: toUserID, IsFollow: false}
+		// 取消关注，说明数据库中一定是有记录的
+		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID, IsFollow: false}
 		if err := dao.FollowUpdate(follow); err != nil {
 			return err
 		}
-		if err := UpdateUserFollowCount(fromUserID, -1); err != nil {
+		if err := UpdateUserFollowCount(fromUID, -1); err != nil {
 			return err
 		}
-		if err := UpdateUserFollowerCount(toUserID, -1); err != nil {
+		if err := UpdateUserFollowerCount(toUID, -1); err != nil {
 			return err
 		}
 	}

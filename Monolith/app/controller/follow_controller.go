@@ -2,6 +2,7 @@ package controller
 
 import (
 	"mini-tiktok/app/service"
+	"mini-tiktok/common/xerr"
 	"net/http"
 	"strconv"
 
@@ -9,26 +10,28 @@ import (
 )
 
 func RelationAction(c *gin.Context) {
-	toUserIDTmp := c.Query("to_user_id")
+	toUIDTmp := c.Query("to_user_id")
 	actionTypeTmp := c.Query("action_type")
-	fromUserIDTmp, _ := c.Get("fromUserID")
-	fromUserID, _ := fromUserIDTmp.(int64)
+	fromUIDTmp, _ := c.Get("uid")
+	fromUID, _ := fromUIDTmp.(int64)
 
-	toUserID, err := strconv.ParseInt(toUserIDTmp, 10, 64)
+	toUID, err := strconv.ParseInt(toUIDTmp, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusOK, Response{StatusCode: 1, StatusMsg: err.Error()})
+		errorHandler(c, xerr.ErrBadRequest)
 		return
 	}
 
 	actionType, err := strconv.ParseInt(actionTypeTmp, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusOK, Response{StatusCode: 1, StatusMsg: err.Error()})
+		errorHandler(c, xerr.ErrBadRequest)
 		return
 	}
 
-	if err := service.RelationAction(fromUserID, toUserID, actionType); err != nil {
-		c.JSON(http.StatusOK, Response{StatusCode: 1, StatusMsg: err.Error()})
+	err = service.RelationAction(fromUID, toUID, actionType)
+	if err != nil {
+		errorHandler(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, Response{StatusCode: 1, StatusMsg: "success"})
+
+	c.JSON(http.StatusOK, success)
 }

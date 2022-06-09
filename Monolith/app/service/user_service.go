@@ -7,19 +7,23 @@ import (
 	"mini-tiktok/common/auth"
 	"mini-tiktok/common/db"
 	"mini-tiktok/common/utils"
+	"mini-tiktok/common/xerr"
+	"regexp"
 
+	"go.uber.org/zap"
+	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
 )
 
-type UserDTO struct {
-	ID            int64
-	UserName      string
-	FollowCount   int64
-	FollowerCount int64
-	IsFollow      bool
+type UserVO struct {
+	ID            int64  `json:"id"`
+	UserName      string `json:"name"`
+	FollowCount   int64  `json:"follow_count"`
+	FollowerCount int64  `json:"follower_count"`
+	IsFollow      bool   `json:"is_follow"`
 }
 
-// CheckUserExist query mysql to check if the username has appeared.
+// 去数据库中查询用户名是否存在
 func CheckUserNameExist(username string) (bool, error) {
 	user := &entity.User{UserName: username}
 	err := dao.UserGetByName(user)
@@ -31,95 +35,110 @@ func CheckUserNameExist(username string) (bool, error) {
 	return true, nil
 }
 
-// Before register, controller has checked wheather username exist.
-// If registation success, return userID, token, nil, otherwise return -1, "", err.
 func Register(username, password string) (int64, string, error) {
-	// check username and password and sql injection attack
-	if username == "" {
-		return -1, "", errors.New("invaild username")
-	} else if len(username) > 32 || len(password) > 32 {
-		return -1, "", errors.New("username or password too long")
+	// 使用正则表达式检验用户输入的用户名和密码是否合法，
+	// 不合法则返回ErrUsernameValidation或ErrPasswordValidation
+
+	// 用户名由字母数据下划线英文句号组成，长度要求4-16之间
+	usernameReg, _ := regexp.Compile(`^[a-zA-Z0-9_\.@]{4,16}$`)
+	if !usernameReg.MatchString(username) {
+		return 0, "", xerr.ErrUsernameValidation
 	}
 
-	// use redis check wheather this user has already existed
+	// 密码匹配6-16位英文数据大部分英文标点
+	passwordReg, _ := regexp.Compile(`^([A-Za-z0-9\-=\[\];,\./~!@#\$%^\*\(\)_\+}{:\?]){6,16}$`)
+	if !passwordReg.MatchString(password) {
+		return 0, "", xerr.ErrPasswordValidation
+	}
+
+	// 使用redis查询用户名是否已存在，如果已存在返回ErrUserExist
 	exist, err := db.NewRedisDaoInstance().IsUserNameExist(username)
 	if err != nil {
-		return -1, "", err
+		return 0, "", err
 	}
 	if exist {
-		return -1, "", errors.New("user already exist")
+		return 0, "", xerr.ErrUserExist
 	}
 
-	// encrypt password and then store into mysql
-	encodePassword := encrypt(password)
-	user := &entity.User{UserName: username, Password: encodePassword}
+	// 使用标准库函数对用户的密码进行加密
+	encodePassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		zap.L().Error("encrypt password failed")
+		return 0, "", xerr.ErrInternalServer
+	}
+	user := &entity.User{UserName: username, Password: string(encodePassword)}
+
+	// 初始化雪花算法，并生成userid
 	snowFlake, err := utils.NewSnowFlake(0, 0)
 	if err != nil {
-		return -1, "", err
+		zap.L().Error("init snow flake failed")
+		return 0, "", xerr.ErrInternalServer
 	}
 	user.UserID, err = snowFlake.NextId()
 	if err != nil {
-		return -1, "", err
+		zap.L().Error("generate uid failed")
+		return 0, "", xerr.ErrInternalServer
 	}
 
+	// 将用户信息存储在mysql中
 	if err := dao.UserAdd(user); err != nil {
-		return -1, "", err
+		return 0, "", err
 	}
 
-	// store namelist username into redis
+	// 将用户名信息存储在redis中
 	if err := db.NewRedisDaoInstance().AddToNameList(user.UserName); err != nil {
-		return -1, "", err
+		return 0, "", err
 	}
 
-	// store (token, userID) into redis
+	// 将token,userid 存储在redis中
 	token := auth.GenerateToken(user.UserID)
 	if err := db.NewRedisDaoInstance().SetToken(token, user.UserID); err != nil {
-		return -1, "", err
+		return 0, "", err
 	}
 	return user.UserID, token, nil
 }
 
-// Before login, controller has checked wheather username exist.
-// If login success, return userID, token, nil, otherwise return -1, "", err.
 func Login(username, password string) (int64, string, error) {
-	// check username and password and sql injection attack
-
-	// use redis check wheather this user has already existed
+	// 使用redis查询用户名是否存在，如果不存在则直接返回ErrUserNotFound错误
 	exist, err := db.NewRedisDaoInstance().IsUserNameExist(username)
 	if err != nil {
-		return -1, "", err
+		return 0, "", err
 	}
 	if !exist {
-		return -1, "", errors.New("user doesn't exist")
+		return 0, "", xerr.ErrUserNotFound
 	}
 
+	// 查询mysql数据库，因为已经在redis中查询过，所以不需要考虑用户是否存在的问题
+	// 即使不存在，err为gorm.ErrRecordNotFound那么也会被直接返回
 	user := &entity.User{UserName: username}
 	if err := dao.UserGetByName(user); err != nil {
-		return -1, "", err
+		return 0, "", err
 	}
 
-	// decrypt the string stored in mysql
-	decodePassword := decrypt(user.Password)
-	if decodePassword != password {
-		return -1, "", errors.New("wrong password")
+	// 将用户输入的password与数据库中存储的密文比较，比如密码不正确，则返回ErrPasswordIncorrect
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	if err != nil {
+		return 0, "", xerr.ErrPasswordIncorrect
 	}
 
+	// 将token, user_id键值对存储在redis中
 	token := auth.GenerateToken(user.UserID)
-	db.NewRedisDaoInstance().SetToken(token, user.UserID)
+	if err = db.NewRedisDaoInstance().SetToken(token, user.UserID); err != nil {
+		return 0, "", err
+	}
 	return user.UserID, token, nil
 }
 
 // fromUserID wants to look over toUserID's user information.
-func UserInfo(toUserID, fromUserID int64) (*UserDTO, error) {
-	// check toUserID and fromUserID
+func UserInfo(toUserID, fromUserID int64) (*UserVO, error) {
 
 	user := &entity.User{UserID: toUserID}
+	// 查询想查看的用户是否存在
 	if err := dao.UserGetByUID(user); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, errors.New("user id doesn't exist")
-		} else {
-			return nil, err
+			return nil, xerr.ErrUserNotFound
 		}
+		return nil, err
 	}
 
 	// query like table, check fromUserID is follow toUserID or not
@@ -131,16 +150,6 @@ func UserInfo(toUserID, fromUserID int64) (*UserDTO, error) {
 			return nil, err
 		}
 	}
-	userDTO := &UserDTO{user.UserID, user.UserName, user.FollowCount, user.FollowerCount, follow.IsFollow}
+	userDTO := &UserVO{user.UserID, user.UserName, user.FollowCount, user.FollowerCount, follow.IsFollow}
 	return userDTO, nil
-}
-
-// use base64 encrypt password
-func encrypt(str string) string {
-	return str
-}
-
-// use base64 decrypt password
-func decrypt(str string) string {
-	return str
 }

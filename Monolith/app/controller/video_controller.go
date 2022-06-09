@@ -1,104 +1,118 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
-	"io"
-	"mini-tiktok/app/constant"
-	"mini-tiktok/app/entity"
 	"mini-tiktok/app/service"
-	"mini-tiktok/common/utils"
+	"mini-tiktok/common/xerr"
 	"net/http"
-	"os"
 	"strconv"
 	"time"
+
+	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 type VideoResponse struct {
 	Response
-	VideoList []service.PublicationVo `json:"video_list"`
+	VideoList []service.PublicationVO `json:"video_list"`
+}
+
+type FeedResponse struct {
+	Response
+	NextTime  int                     `json:"next_time"`
+	VideoList []service.PublicationVO `json:"video_list"`
 }
 
 func PublishList(c *gin.Context) {
-	//token := c.Query("token")
-	userId := c.Query("user_id")
-	uid, err2 := strconv.Atoi(userId)
-	if err2 != nil {
+	fromUIDTmp, exists := c.Get("uid")
+	fromUID, ok := fromUIDTmp.(int64)
+	if !exists || !ok {
+		zap.S().Errorf("parse fromUserID:%v failed", fromUIDTmp)
+		errorHandler(c, xerr.ErrBadRequest)
 		return
 	}
-	videos, err := service.GetVideoListByUser(int64(uid))
+	userId := c.Query("user_id")
+	uid, err := strconv.Atoi(userId)
 	if err != nil {
-		c.JSON(http.StatusOK, VideoResponse{
-			Response{StatusCode: 1, StatusMsg: constant.QueryFail},
-			nil,
-		})
+		zap.S().Errorf("parse user_id:%v failed", uid)
+		errorHandler(c, xerr.ErrBadRequest)
+		return
+	}
+	videos, err := service.GetVideoListByUser(int64(uid), fromUID)
+	if err != nil {
+		errorHandler(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, VideoResponse{
-		Response{StatusCode: 0, StatusMsg: ""},
+		success,
 		videos,
 	})
 }
 
 // Publish 待解决问题 token鉴权，没有判断上传的是否为视频/*
 func Publish(c *gin.Context) {
-	file, header, err := c.Request.FormFile("data")
-	//token := c.Request.Form.Get("token")
-	title := c.Request.Form.Get("title")
+	// 获取参数
+	file, err := c.FormFile("data")
+	title := c.PostForm("title")
+	// file, header, err := c.Request.FormFile("data")
+	// //token := c.Request.Form.Get("token")
+	// title := c.Request.Form.Get("title")
 	if err != nil {
-		c.JSON(http.StatusOK, Response{
-			StatusCode: 1,
-			StatusMsg:  constant.InvalidFile,
-		})
+		errorHandler(c, xerr.ErrInvaildFile)
 		return
 	}
-	filepath := "videos/" + header.Filename
-	out, err := os.Create(filepath)
-	if err != nil {
-		c.JSON(http.StatusOK, Response{
-			StatusCode: 1,
-			StatusMsg:  constant.UnknownError,
-		})
-	}
-	defer out.Close()
-	_, err = io.Copy(out, file)
-	if err != nil {
-		c.JSON(http.StatusOK, Response{
-			StatusCode: 1,
-			StatusMsg:  constant.UnknownError,
-		})
+	filepath := "upload/videos/" + file.Filename
+	c.SaveUploadedFile(file, filepath)
+
+	uidTmp, exists := c.Get("uid")
+	uid, ok := uidTmp.(int64)
+	if !exists || !ok {
+		zap.S().Errorf("parse fromUserID:%v failed", uidTmp)
+		errorHandler(c, xerr.ErrBadRequest)
 		return
 	}
-	flake, err := utils.NewSnowFlake(1, 1)
+
+	// out, err := os.Create(filepath)
+	// if err != nil {
+	// 	zap.L().Error("create video file failed")
+	// 	errorHandler(c, xerr.ErrInternalServer)
+	// 	return
+	// }
+	// defer out.Close()
+
+	// _, err = io.Copy(out, file)
+	// if err != nil {
+	// 	zap.L().Error("copy video file failed")
+	// 	errorHandler(c, xerr.ErrInternalServer)
+	// 	return
+	// }
+
+	// 模拟器的地址
+	// url := "http://10.0.2.2:8079/" + filepath
+	// 服务器上
+	url := "http://39.107.81.188:8079/" + filepath
+	err = service.VideoPublish(url, title, uid)
 	if err != nil {
-		c.JSON(http.StatusOK, Response{
-			StatusCode: 1,
-			StatusMsg:  constant.UnknownError,
-		})
+		errorHandler(c, err)
 		return
 	}
-	vid, _ := flake.NextId()
-	now := time.Now()
-	// ownerId need to be changed
-	err = service.VideoPublish(&entity.Publication{
-		VideoID:        vid,
-		OwnerID:        1,
-		Title:          title,
-		PlayUrl:        filepath,
-		CoverUrl:       "",
-		CreateTime:     &now,
-		FavouriteCount: 0,
-		CommentCount:   0,
-		Status:         0,
-	})
+
+	c.JSON(http.StatusOK, success)
+}
+
+func Feed(c *gin.Context) {
+	lastest := c.Query("latest_time")
+	if lastest == "" {
+		lastest = time.Now().Format("2006-01-02 15:04:05")
+	}
+	nextTime, videos, err := service.Feed(lastest)
 	if err != nil {
-		c.JSON(http.StatusOK, Response{
-			StatusCode: 1,
-			StatusMsg:  constant.UnknownError,
-		})
+		errorHandler(c, err)
 		return
 	}
-	c.JSON(http.StatusOK, Response{
-		StatusCode: 0, StatusMsg: "success",
+	c.JSON(http.StatusOK, FeedResponse{
+		success,
+		nextTime,
+		videos,
 	})
 }

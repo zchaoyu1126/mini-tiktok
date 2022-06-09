@@ -1,42 +1,49 @@
 package dao
 
 import (
-	"log"
+	"errors"
 	"mini-tiktok/app/entity"
+	"mini-tiktok/common/xerr"
+
+	"go.uber.org/zap"
+	"gorm.io/gorm"
 )
 
 func UserAdd(user *entity.User) error {
-	// migrate 仅支持创建表、增加表中没有的字段和索引。为了保护你的数据，它并不支持改变已有的字段类型或删除未被使用的字段
-	mysqlDB.AutoMigrate(&entity.User{})
-	err := mysqlDB.Create(user).Error
-	if err != nil {
-		log.Println(err)
+	if err := mysqlDB.Create(user).Error; err != nil {
+		zap.L().Error("mysql:users create new user failed")
+		return xerr.ErrDatabase
 	}
-	return err
+	return nil
 }
 
+// 除用户不存在导致的err外，其余所有的error情况都直接返回ErrDatabase
 func UserGetByName(user *entity.User) error {
-	mysqlDB.AutoMigrate(&entity.User{})
-	err := mysqlDB.Where("username=?", user.UserName).First(user).Error
-	if err != nil {
-		log.Println(err)
+	if err := mysqlDB.Where("username=?", user.UserName).First(user).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			zap.L().Error("mysql:users query user by username failed")
+			return xerr.ErrDatabase
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 func UserGetByUID(user *entity.User) error {
-	mysqlDB.AutoMigrate(&entity.User{})
-	err := mysqlDB.Where("user_id=?", user.UserID).First(user).Error
-	if err != nil {
-		log.Println(err)
+	if err := mysqlDB.Where("user_id=?", user.UserID).First(user).Error; err != nil {
+		if !errors.Is(err, gorm.ErrRecordNotFound) {
+			zap.L().Error("mysql:users query user by ID failed")
+			return xerr.ErrDatabase
+		}
+		return err
 	}
-	return err
+	return nil
 }
 
 func UserUpdate(user *entity.User) error {
-	err := mysqlDB.Save(user).Error
-	if err != nil {
-		log.Println(err)
+	if err := mysqlDB.Save(user).Error; err != nil {
+		zap.L().Error("mysql:users update user failed")
+		return xerr.ErrDatabase
 	}
-	return err
+	return nil
 }

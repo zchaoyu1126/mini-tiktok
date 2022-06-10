@@ -2,12 +2,12 @@ package db
 
 import (
 	"io/ioutil"
-	"log"
+	"mini-tiktok/common/xerr"
 	"strconv"
 	"sync"
 
 	"github.com/go-redis/redis"
-	"github.com/pkg/errors"
+	"go.uber.org/zap"
 	"gopkg.in/yaml.v2"
 )
 
@@ -20,31 +20,25 @@ type RedisConfig struct {
 }
 
 // Redis Data Access Object
-type RedisDao struct {
+type RedisConn struct {
 	rdb *redis.Client
 }
 
-var redisDao *RedisDao
-var once2 sync.Once
+var redisConn *RedisConn
+var redisOnce sync.Once
 
 // Get redis configure from yaml file.
 // If read or unmarshal failed, exit instantly.
-func getRedisConf() *RedisConfig {
-	var c RedisConfig
-	file, err := ioutil.ReadFile(configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-	err = yaml.Unmarshal(file, &c)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return &c
+func readRedisConf() *RedisConfig {
+	config := new(RedisConfig)
+	file, _ := ioutil.ReadFile("config.yaml")
+	yaml.Unmarshal(file, config)
+	return config
 }
 
 // connect to the redis
 func InitRedis() *redis.Client {
-	conf := getRedisConf()
+	conf := readRedisConf()
 	rdb := redis.NewClient(&redis.Options{
 		Addr:     conf.Host + ":" + conf.Port,
 		Password: "",
@@ -53,65 +47,85 @@ func InitRedis() *redis.Client {
 
 	_, err := rdb.Ping().Result()
 	if err != nil {
-		log.Fatal(err)
+		zap.L().Fatal("Redis init failed")
 	}
-	log.Println("redis init success.")
-	// read mysql user exist or not
+	zap.L().Info("Redis init success")
 	return rdb
 }
 
 // return redis dao with singleten pattern
-func NewRedisDaoInstance() *RedisDao {
-	once2.Do(
+func NewRedisDaoInstance() *RedisConn {
+	redisOnce.Do(
 		func() {
 			rdb := InitRedis()
-			redisDao = &RedisDao{rdb}
+			redisConn = &RedisConn{rdb}
 		})
-	return redisDao
+	return redisConn
 }
 
 // store (token, userID) in redis
-func (r *RedisDao) SetToken(token string, userID int64) error {
+func (r *RedisConn) SetToken(token string, userID int64) error {
 	// 0 means this key(token) never expire
 	err := r.rdb.Set(token, userID, 0).Err()
-	return err
+	if err != nil {
+		zap.L().Error("redis: set token userid failed")
+		return xerr.ErrDatabase
+	}
+	return nil
 }
 
 // get token's value from redis
-func (r *RedisDao) GetToken(token string) (int64, error) {
+func (r *RedisConn) GetToken(token string) (int64, error) {
 	val, err := r.rdb.Get(token).Result()
 	if err == redis.Nil {
-		return -1, errors.New("repository key does not exist")
+		return 0, xerr.ErrTokenNotFound
 	} else if err != nil {
-		return -1, errors.New("repository get failed")
+		zap.L().Error("redis: get token failed")
+		return 0, xerr.ErrDatabase
 	}
 	id, _ := strconv.ParseInt(val, 10, 64)
 	return id, nil
 }
 
 // once user logout use this method to remove token from redis.
-func (r *RedisDao) ClearToken(token string) error {
-	return r.rdb.Del(token).Err()
+func (r *RedisConn) ClearToken(token string) error {
+	err := r.rdb.Del(token).Err()
+	if err != nil {
+		zap.L().Error("redis: del token failed")
+		return xerr.ErrDatabase
+	}
+	return nil
 }
 
 // check token is expired or not.
-func (r *RedisDao) IsTokenValid(token string) (bool, error) {
+func (r *RedisConn) IsTokenValid(token string) (bool, error) {
 	val, err := r.rdb.TTL(token).Result()
 	if err != nil {
-		return false, err
+		zap.L().Error("redis: ttl token failed")
+		return false, xerr.ErrDatabase
 	}
-	// once the key is expired, ttl key's result is -2,
-	// so val == -2 means this token is expired.
+	// key 不存在返回 -2
+	// key 存在但是没有关联超时时间返回 -1
 	if val == -2 {
 		return false, nil
 	}
 	return true, nil
 }
 
-func (r *RedisDao) AddToNameList(username string) error {
-	return r.rdb.SAdd("namelist", username).Err()
+func (r *RedisConn) AddToNameList(username string) error {
+	err := r.rdb.SAdd("namelist", username).Err()
+	if err != nil {
+		zap.L().Error("redis: sadd namelist user failed")
+		return xerr.ErrDatabase
+	}
+	return nil
 }
 
-func (r *RedisDao) IsUserNameExist(username string) (bool, error) {
-	return r.rdb.SIsMember("namelist", username).Result()
+func (r *RedisConn) IsUserNameExist(username string) (bool, error) {
+	exist, err := r.rdb.SIsMember("namelist", username).Result()
+	if err != nil {
+		zap.L().Error("redis: sismember namelist username failed")
+		return false, xerr.ErrDatabase
+	}
+	return exist, nil
 }

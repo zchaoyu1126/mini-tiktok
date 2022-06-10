@@ -2,10 +2,10 @@ package db
 
 import (
 	"io/ioutil"
-	"log"
 	"sync"
 	"time"
 
+	"go.uber.org/zap"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 
@@ -35,24 +35,16 @@ var mysqlOnce sync.Once
 
 // Get Mysql configure from yaml.
 // If read yaml file failed or unmarshal failed, system exit instantly.
-func getMysqlConf() *MysqlConfig {
-	var c MysqlConfig
-
-	file, err := ioutil.ReadFile(configPath)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	err = yaml.Unmarshal(file, &c)
-	if err != nil {
-		log.Fatal(err)
-	}
-	return &c
+func readMysqlConf() *MysqlConfig {
+	config := new(MysqlConfig)
+	file, _ := ioutil.ReadFile("config.yaml")
+	yaml.Unmarshal(file, config)
+	return config
 }
 
 // connect mysql database
 func InitMySql() *gorm.DB {
-	conf := getMysqlConf()
+	conf := readMysqlConf()
 	dsn := fmt.Sprintf("%s:%s@tcp(%s:%s)/%s?charset=utf8mb4&parseTime=True&loc=Local",
 		conf.UserName,
 		conf.Password,
@@ -60,15 +52,15 @@ func InitMySql() *gorm.DB {
 		conf.Port,
 		conf.DbName,
 	)
-
+	fmt.Println(dsn)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
-		log.Fatal(err)
+		zap.L().Fatal("mysql database init failed")
 	}
 
 	sqlDB, err := db.DB()
 	if err != nil {
-		log.Fatal(err)
+		zap.L().Fatal("mysql database init failed")
 	}
 
 	sqlDB.SetMaxIdleConns(20)
@@ -78,9 +70,9 @@ func InitMySql() *gorm.DB {
 	// test the connect
 	if sqlDB.Ping() != nil {
 		sqlDB.Close()
-		log.Fatal(err)
+		zap.L().Fatal("mysql database init failed")
 	}
-	log.Println("mysql init success.")
+	zap.L().Info("mysql database init success")
 	return db
 }
 
@@ -93,9 +85,3 @@ func NewMySQLConnInstance() *MySQLConn {
 		})
 	return mysqlConn
 }
-
-// this method was removed in gormv2
-// close the database
-// func Close() {
-// 	db.Close()
-// }

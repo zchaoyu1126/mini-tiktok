@@ -2,97 +2,88 @@ package controller
 
 import (
 	"mini-tiktok/app/service"
+	"mini-tiktok/common/xerr"
 	"net/http"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
-
-type UserVO struct {
-	ID            int64  `json:"id"`
-	UserName      string `json:"name"`
-	FollowCount   int64  `json:"follow_count"`
-	FollowerCount int64  `json:"follower_count"`
-	IsFollow      bool   `json:"is_follow"`
-}
 
 type UserLoginResponse struct {
 	Response
-	UserId int64  `json:"user_id"`
+	UserID int64  `json:"user_id"`
 	Token  string `json:"token"`
 }
 
 type UserInfoResponse struct {
 	Response
-	UserVO `json:"user"`
+	*service.UserVO `json:"user"`
 }
 
+// 用户注册
 func Register(c *gin.Context) {
 	username := c.Query("username")
 	password := c.Query("password")
 
 	id, token, err := service.Register(username, password)
 	if err != nil {
-		c.JSON(http.StatusOK, UserLoginResponse{
-			Response: Response{StatusCode: 2, StatusMsg: "because of database, login failed"},
-			UserId:   -1,
-			Token:    "",
-		})
+		errorHandler(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, UserLoginResponse{
-		Response: Response{StatusCode: 0, StatusMsg: "success"},
-		UserId:   id,
+		Response: success,
+		UserID:   id,
 		Token:    token,
 	})
 }
 
+// 用户登录
 func Login(c *gin.Context) {
 	username := c.Query("username")
 	password := c.Query("password")
 
 	id, token, err := service.Login(username, password)
 	if err != nil {
-		c.JSON(http.StatusOK, UserLoginResponse{
-			Response: Response{StatusCode: 2, StatusMsg: err.Error()},
-			UserId:   -1,
-			Token:    "",
-		})
+		errorHandler(c, err)
 		return
 	}
 
 	c.JSON(http.StatusOK, UserLoginResponse{
-		Response: Response{StatusCode: 0, StatusMsg: "login success"},
-		UserId:   id,
+		Response: success,
+		UserID:   id,
 		Token:    token,
 	})
 }
 
+// 用户信息
 func UserInfo(c *gin.Context) {
+	// 获取Query参数 user_id, user_id解析失败时返回ErrBadRequest错误
 	toUserIDTmp := c.Query("user_id")
-	toUserID, _ := strconv.ParseInt(toUserIDTmp, 10, 64)
-
-	fromUserIDTmp, _ := c.Get("fromUserID")
-	fromUserID, _ := fromUserIDTmp.(int64)
-
-	userDTO, err := service.UserInfo(toUserID, fromUserID)
+	toUserID, err := strconv.ParseInt(toUserIDTmp, 10, 64)
 	if err != nil {
-		c.JSON(http.StatusOK, UserInfoResponse{
-			Response: Response{StatusCode: 1, StatusMsg: err.Error()},
-		})
+		zap.S().Errorf("parse user_id:%v failed", toUserIDTmp)
+		errorHandler(c, xerr.ErrBadRequest)
+	}
+
+	// 获取经过路由中间件UserAuthMiddlerWare解析后又写入的fromUserID信息
+	fromUIDTmp, exists := c.Get("uid")
+	fromUID, ok := fromUIDTmp.(int64)
+	if !exists || !ok {
+		zap.S().Errorf("parse fromUserID:%v failed", fromUIDTmp)
+		errorHandler(c, xerr.ErrBadRequest)
 		return
 	}
 
-	user := UserVO{
-		ID:            userDTO.ID,
-		UserName:      userDTO.UserName,
-		FollowCount:   userDTO.FollowCount,
-		FollowerCount: userDTO.FollowerCount,
-		IsFollow:      userDTO.IsFollow,
+	user, err := service.UserInfo(toUserID, fromUID)
+	if err != nil {
+		errorHandler(c, err)
+		return
 	}
+
 	c.JSON(http.StatusOK, UserInfoResponse{
-		Response: Response{StatusCode: 0, StatusMsg: "success"},
+		Response: success,
 		UserVO:   user,
 	})
 }

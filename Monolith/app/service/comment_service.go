@@ -1,37 +1,39 @@
 package service
 
 import (
-	"log"
+	"fmt"
 	"mini-tiktok/app/dao"
 	"mini-tiktok/app/entity"
 	"mini-tiktok/common/utils"
+	"mini-tiktok/common/xerr"
 	"strconv"
 	"time"
+
+	"go.uber.org/zap"
 )
 
-type Comment struct {
-	ID         int64
-	Content    string
-	UserDTO    UserDTO
-	CreateDate string
+type CommentVO struct {
+	ID         int64  `json:"id"`
+	Content    string `json:"content"`
+	UserVO     UserVO `json:"user"`
+	CreateDate string `json:"create_date"`
 }
 
-func CommentAdd(video_id string, comment_text string, user_id int64) (*Comment, error) {
-
+func CommentAdd(video_id string, comment_text string, user_id int64) (*CommentVO, error) {
 	var comment_id int64
-	var responseComment *Comment
-	var user *entity.User
+	var responseComment *CommentVO
 	videoId, _ := strconv.ParseInt(video_id, 10, 64)
 
-	snowFlake, err := utils.NewSnowFlake(0, 0)
+	// 生成全局唯一的commit id
+	snowFlake, err := utils.NewSnowFlake(2, 2)
 	if err != nil {
-		log.Println(err)
-		return nil, err
+		zap.L().Error("snow flake init failed")
+		return nil, xerr.ErrInternalServer
 	}
 	comment_id, err = snowFlake.NextId()
 	if err != nil {
-		log.Panicln(err)
-		return nil, err
+		zap.L().Error("generate comment id failed")
+		return nil, xerr.ErrInternalServer
 	}
 
 	comment := &entity.Comment{
@@ -41,100 +43,84 @@ func CommentAdd(video_id string, comment_text string, user_id int64) (*Comment, 
 		Content:   comment_text,
 		Status:    1,
 	}
+
 	err = dao.CommentAdd(comment)
 	if err != nil {
-		log.Println(err)
-	}
-
-	dao.UserGetByVideoID(videoId, user)
-
-	userDTO, err1 := UserInfo(user.UserID, user_id)
-	if err1 != nil {
-		log.Panicln(err)
 		return nil, err
 	}
 
-	responseComment = &Comment{
+	// 评论的所有者 userVO
+	userVO, err := UserInfo(user_id, user_id)
+	if err != nil {
+		return nil, err
+	}
+
+	responseComment = &CommentVO{
 		ID:         comment_id,
 		Content:    comment_text,
-		UserDTO:    *userDTO,
+		UserVO:     *userVO,
 		CreateDate: time.Now().Format("mm-dd"),
 	}
 
-	return responseComment, err
+	return responseComment, nil
 }
 
-func CommentDelete(video_id string, comment_id string, user_id int64) (*Comment, error) {
+func CommentDelete(video_id string, comment_id string, user_id int64) (*CommentVO, error) {
+	comment := new(entity.Comment)
 
-	var comment *entity.Comment
-	var responseComment *Comment
-	videoId, _ := strconv.ParseInt(video_id, 10, 64)
 	commentId, _ := strconv.ParseInt(comment_id, 10, 64)
-	var user *entity.User
-
 	comment.CommentID = commentId
 
+	// 首先根据commentID获取这条评论
 	err := dao.CommentGetByCommentID(comment)
 	if err != nil {
-		log.Println(err)
 		return nil, err
 	}
 
+	// 查询发起人与这条评论作者之间的关系
+	userVO, err := UserInfo(comment.UserID, user_id)
+	if err != nil {
+		return nil, err
+	}
+
+	fmt.Println(comment)
+	// 由于comment是唯一的，所以根据commentID可直接删除
 	err = dao.CommentDelete(comment)
 	if err != nil {
-		log.Println(err)
 		return nil, err
 	}
 
-	dao.UserGetByVideoID(videoId, user)
-
-	userDTO, err1 := UserInfo(user.UserID, user_id)
-	if err1 != nil {
-		log.Panicln(err1)
-		return nil, err1
-	}
-
-	responseComment = &Comment{
+	responseComment := &CommentVO{
 		ID:         commentId,
 		Content:    comment.Content,
-		UserDTO:    *userDTO,
-		CreateDate: comment.CreateTime.Format("mm-dd"),
+		UserVO:     *userVO,
+		CreateDate: comment.CreatedAt.Format("mm-dd"),
 	}
 
-	return responseComment, err
-
+	return responseComment, nil
 }
 
-func CommentList(user_id int64, video_id string) ([]Comment, error) {
-
-	var user *entity.User
+func CommentList(user_id int64, video_id string) ([]CommentVO, error) {
 	videoId, _ := strconv.ParseInt(video_id, 10, 64)
-	var userDTO *UserDTO
 	var commentList []entity.Comment
-	var commentVoList []Comment
+	var commentVOList []CommentVO
 
-	dao.UserGetByVideoID(videoId, user)
-
-	userDTO, err := UserInfo(user.UserID, user_id)
+	// 根据vid得到该视频的所有评论
+	err := dao.CommentListGetByVideoId(videoId, &commentList)
 	if err != nil {
-		log.Panicln(err)
 		return nil, err
 	}
 
-	err1 := dao.CommentListGetByVideoId(videoId, &commentList)
-
-	if err1 != nil {
-		log.Println(err)
-		return nil, err1
-	}
-
+	commentVOList = make([]CommentVO, len(commentList))
+	// 需要根据commentList[i].UserID去获取UserVO对象
 	for i := 0; i < len(commentList); i++ {
-		commentVoList[i].ID = commentList[i].CommentID
-		commentVoList[i].Content = commentList[i].Content
-		commentVoList[i].UserDTO = *userDTO
-		commentVoList[i].CreateDate = commentList[i].CreateTime.Format("mm-dd")
+		commentVOList[i].ID = commentList[i].CommentID
+		commentVOList[i].Content = commentList[i].Content
+		zap.S().Infof("%d %d", commentList[i].UserID, user_id)
+		userVO, _ := UserInfo(commentList[i].UserID, user_id)
+		commentVOList[i].UserVO = *userVO
+		commentVOList[i].CreateDate = commentList[i].CreatedAt.Format("mm-dd")
 	}
 
-	return commentVoList, err1
-
+	return commentVOList, err
 }

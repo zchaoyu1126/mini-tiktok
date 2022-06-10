@@ -15,4 +15,5 @@ func init() {
 	mysqlDB.AutoMigrate(&entity.Publication{})
 	mysqlDB.AutoMigrate(&entity.Favourite{})
 	mysqlDB.AutoMigrate(&entity.Follow{})
+	mysqlDB.AutoMigrate(&entity.Comment{})
 }

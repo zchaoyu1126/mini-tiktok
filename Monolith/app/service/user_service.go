@@ -143,13 +143,19 @@ func UserInfo(toUserID, fromUserID int64) (*UserVO, error) {
 
 	// query like table, check fromUserID is follow toUserID or not
 	follow := &entity.Follow{FromUserID: fromUserID, ToUserID: toUserID}
+	var isFollow bool
 	if fromUserID == toUserID {
-		follow.IsFollow = false
+		isFollow = false
 	} else {
 		if err := dao.FollowGetByIDs(follow); err != nil {
-			return nil, err
+			if errors.Is(err, gorm.ErrRecordNotFound) {
+				isFollow = false
+			} else if err != nil {
+				return nil, err
+			}
 		}
+		isFollow = follow.IsFollow
 	}
-	userDTO := &UserVO{user.UserID, user.UserName, user.FollowCount, user.FollowerCount, follow.IsFollow}
+	userDTO := &UserVO{user.UserID, user.UserName, user.FollowCount, user.FollowerCount, isFollow}
 	return userDTO, nil
 }

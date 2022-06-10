@@ -2,6 +2,7 @@ package controller
 
 import (
 	"mini-tiktok/app/service"
+	"mini-tiktok/common/db"
 	"mini-tiktok/common/xerr"
 	"net/http"
 	"strconv"
@@ -105,7 +106,15 @@ func Feed(c *gin.Context) {
 	if lastest == "" {
 		lastest = time.Now().Format("2006-01-02 15:04:05")
 	}
-	nextTime, videos, err := service.Feed(lastest)
+	token := c.Query("token")
+	var uid int64
+	if token == "" {
+		uid = -1
+	} else {
+		uid, _ = db.NewRedisDaoInstance().GetToken(token)
+	}
+
+	nextTime, videos, err := service.Feed(lastest, uid)
 	if err != nil {
 		errorHandler(c, err)
 		return

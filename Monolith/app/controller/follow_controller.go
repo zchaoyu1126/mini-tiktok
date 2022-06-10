@@ -9,6 +9,11 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+type UserListResponse struct {
+	Response
+	UserList []service.UserVO `json:"user_list"`
+}
+
 func RelationAction(c *gin.Context) {
 	toUIDTmp := c.Query("to_user_id")
 	actionTypeTmp := c.Query("action_type")
@@ -34,4 +39,38 @@ func RelationAction(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, success)
+}
+
+func FollowList(c *gin.Context) {
+	userIDTmp := c.Query("user_id")
+	uidTmp, _ := c.Get("uid")
+	userID, _ := strconv.ParseInt(userIDTmp, 10, 64)
+	uid, _ := uidTmp.(int64)
+
+	list, err := service.FollowList(userID, uid)
+	if err != nil {
+		errorHandler(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, UserListResponse{
+		success,
+		list,
+	})
+}
+
+func FollowerList(c *gin.Context) {
+	userIDTmp := c.Query("user_id")
+	uidTmp, _ := c.Get("uid")
+	userID, _ := strconv.ParseInt(userIDTmp, 10, 64)
+	uid, _ := uidTmp.(int64)
+
+	list, err := service.FollowerList(userID, uid)
+	if err != nil {
+		errorHandler(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, UserListResponse{
+		success,
+		list,
+	})
 }

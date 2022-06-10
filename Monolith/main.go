@@ -15,7 +15,7 @@ func init() {
 func main() {
 	utils.CreateDir("upload/videos/")
 
-	r := gin.New()
+	r := gin.Default()
 	router.InitRouter(r)
 
 	// 开一个文件服务器

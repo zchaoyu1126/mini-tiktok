@@ -2,6 +2,7 @@ package service
 
 import (
 	"errors"
+	"fmt"
 	"mini-tiktok/app/dao"
 	"mini-tiktok/app/entity"
 
@@ -27,6 +28,7 @@ func RelationAction(fromUID, toUID int64, actionType int64) error {
 		}
 
 		// 记录存在的情况
+		follow.IsFollow = true
 		if err := dao.FollowUpdate(follow); err != nil {
 			return err
 		}
@@ -39,7 +41,11 @@ func RelationAction(fromUID, toUID int64, actionType int64) error {
 		return nil
 	} else if actionType == 2 {
 		// 取消关注，说明数据库中一定是有记录的
-		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID, IsFollow: false}
+		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID}
+		if err := dao.FollowGetByIDs(follow); err != nil {
+			return nil
+		}
+		follow.IsFollow = false
 		if err := dao.FollowUpdate(follow); err != nil {
 			return err
 		}
@@ -75,4 +81,40 @@ func UpdateUserFollowerCount(userID, delta int64) error {
 		return err
 	}
 	return nil
+}
+
+// 查询user的关注列表
+func FollowList(userID, uid int64) ([]UserVO, error) {
+	var follows []entity.Follow
+	err := dao.FollowGetByFromUID(userID, &follows)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	userList := make([]UserVO, len(follows))
+	for i, follow := range follows {
+		user, _ := UserInfo(follow.ToUserID, uid)
+		userList[i] = *user
+	}
+	return userList, nil
+}
+
+func FollowerList(userID, uid int64) ([]UserVO, error) {
+	var follows []entity.Follow
+	err := dao.FollowGetByToUID(userID, &follows)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return nil, nil
+	} else if err != nil {
+		return nil, err
+	}
+
+	userList := make([]UserVO, len(follows))
+	fmt.Println(len(follows))
+	for i, follow := range follows {
+		user, _ := UserInfo(follow.FromUserID, uid)
+		userList[i] = *user
+	}
+	return userList, nil
 }

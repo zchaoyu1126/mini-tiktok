@@ -94,13 +94,18 @@ func VideoTransform(v *entity.Publication) (PublicationVO, error) {
 	return vo, err
 }
 
-func Feed(lastest string) (int, []PublicationVO, error) {
+func Feed(lastest string, uid int64) (int, []PublicationVO, error) {
 	var videos []entity.Publication
 	var ret []PublicationVO
 	if err := dao.VideoList(&videos); err != nil {
 		return 0, []PublicationVO{}, err
 	}
+
 	for _, v := range videos {
+		if uid == -1 {
+			uid = v.OwnerID
+		}
+		author, _ := UserInfo(v.OwnerID, uid)
 		ret = append(ret, PublicationVO{
 			ID:             v.VideoID,
 			PlayUrl:        v.PlayUrl,
@@ -108,7 +113,7 @@ func Feed(lastest string) (int, []PublicationVO, error) {
 			FavouriteCount: v.FavouriteCount,
 			CommentCount:   v.CommentCount,
 			Title:          v.Title,
-			Author:         &UserVO{},
+			Author:         author,
 		})
 	}
 

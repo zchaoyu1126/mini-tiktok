@@ -44,7 +44,7 @@ func GetVideoListByUser(toUID, fromUID int64) ([]PublicationVO, error) {
 	}
 
 	for _, v := range videos {
-		vo, err := VideoTransform(&v)
+		vo, err := VideoWithFavouriteTransform(&v, fromUID)
 		if err != nil {
 			return nil, err
 		}
@@ -77,6 +77,10 @@ func VideoPublish(filepath, title string, uid int64) error {
 }
 
 func VideoTransform(v *entity.Publication) (PublicationVO, error) {
+	return VideoWithFavouriteTransform(v, -1)
+}
+
+func VideoWithFavouriteTransform(v *entity.Publication, uid int64) (PublicationVO, error) {
 	vo := PublicationVO{
 		ID:             v.VideoID,
 		PlayUrl:        v.PlayUrl,
@@ -86,12 +90,14 @@ func VideoTransform(v *entity.Publication) (PublicationVO, error) {
 		Title:          v.Title,
 	}
 	var favourite entity.Favourite
-	err := dao.FavouriteGetByVideoUser(&favourite, v.OwnerID, v.VideoID)
-	if err != nil {
-		return PublicationVO{}, err
+	if uid != -1 {
+		err := dao.FavouriteGetByVideoUser(&favourite, uid, v.VideoID)
+		if err != nil {
+			return PublicationVO{}, err
+		}
 	}
 	vo.IsFavourite = favourite.IsFavourite == 1
-	return vo, err
+	return vo, nil
 }
 
 func Feed(lastest string, uid int64) (int, []PublicationVO, error) {

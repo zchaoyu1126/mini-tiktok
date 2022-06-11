@@ -1,14 +1,13 @@
 package db
 
 import (
+	"github.com/go-redis/redis"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"mini-tiktok/common/xerr"
 	"strconv"
 	"sync"
-
-	"github.com/go-redis/redis"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 )
 
 // Redis Configure Struct

@@ -26,10 +26,18 @@ func FavouriteGetByVideoUser(favourite *entity.Favourite, uid int64, vid int64) 
 }
 
 func FavouriteUpdate(favourite *entity.Favourite) error {
-	err := mysqlDB.Where("user_id=?", favourite.UserID).Where("video_id=?", favourite.VideoID).Update("is_favourite", favourite.IsFavourite).Error
+	err := mysqlDB.Save(favourite).Error
 	if err != nil {
 		zap.L().Error("mysql:favourites update an entry failed")
 		return xerr.ErrDatabase
+	}
+	return nil
+}
+
+func FavouriteGetById(favourite *entity.Favourite) error {
+	err := mysqlDB.Where("user_id=?", favourite.UserID).Where("video_id=?", favourite.VideoID).First(favourite).Error
+	if err != nil {
+		return err
 	}
 	return nil
 }

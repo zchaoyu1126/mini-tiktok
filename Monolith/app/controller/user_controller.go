@@ -49,7 +49,6 @@ func Login(c *gin.Context) {
 		errorHandler(c, err)
 		return
 	}
-
 	c.JSON(http.StatusOK, UserLoginResponse{
 		Response: success,
 		UserID:   id,

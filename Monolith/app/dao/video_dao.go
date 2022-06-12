@@ -32,3 +32,21 @@ func VideoList(videoList *[]entity.Publication) error {
 	}
 	return nil
 }
+
+func VideoGetById(publication *entity.Publication) error {
+	err := mysqlDB.Where("video_id", publication.VideoID).Find(publication).Error
+	if err != nil {
+		zap.S().Errorf("mysql:publications get video by id failed%w", err)
+		return xerr.ErrDatabase
+	}
+	return nil
+}
+
+func VideoUpdateById(publication *entity.Publication) error {
+	err := mysqlDB.Save(publication).Error
+	if err != nil {
+		zap.S().Errorf("mysql:publications update failed%w", err)
+		return xerr.ErrDatabase
+	}
+	return nil
+}

@@ -8,6 +8,7 @@ import (
 )
 
 var mysqlDB *gorm.DB
+var RedisDB *db.RedisConn
 
 func init() {
 	mysqlDB = db.NewMySQLConnInstance().DB
@@ -16,4 +17,5 @@ func init() {
 	mysqlDB.AutoMigrate(&entity.Favourite{})
 	mysqlDB.AutoMigrate(&entity.Follow{})
 	mysqlDB.AutoMigrate(&entity.Comment{})
+	//RedisDB = db.NewRedisDaoInstance()
 }

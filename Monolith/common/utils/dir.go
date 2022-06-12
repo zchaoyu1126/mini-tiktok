@@ -27,7 +27,7 @@ func CreateDir(path string) {
 	}
 
 	if !exist {
-		err := os.Mkdir(path, os.ModePerm)
+		err := os.MkdirAll(path, os.ModePerm)
 		if err != nil {
 			zap.L().Fatal("mkdir videos failed")
 			return

@@ -1,8 +1,8 @@
 # mysql config
 mysql_host: 127.0.0.1
 mysql_username: root
-# mysql_password: root
-mysql_password: cxDgTq9K
+mysql_password: root
+# mysql_password: cxDgTq9K
 mysql_dbname: mini_tiktok
 mysql_port: 3306
 
@@ -15,7 +15,7 @@ redis_password: 0
 # logger config
 # 定义从哪一级别开始打印日志，可选项为
 # DEBUG(-1) INFO(0) ERROR(2)  FATAL(5)
-log_level: 0
+log_level: 2
 # log_format: "json"
 log_format: "console"
 log_time_key: "time"

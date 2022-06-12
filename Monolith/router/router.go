@@ -5,19 +5,20 @@ import (
 	"net/http"
 
 	"github.com/gin-gonic/gin"
+	"go.uber.org/zap"
 )
 
 func InitRouter(r *gin.Engine) {
 	// public directory is used to serve static resources
-	// r.Use(ZapLogger(zap.L()))
-	// r.Use(ZapRecovery(zap.L(), true))
+	r.Use(ZapLogger(zap.L()))
+	r.Use(ZapRecovery(zap.L(), true))
 
 	r.StaticFS("/upload/videos", http.Dir("upload/videos"))
 
 	apiRouter := r.Group("/douyin")
 
 	// basic apis
-	apiRouter.GET("/feed/", controller.Feed)
+	apiRouter.GET("/feed/", UserAuth("Query"), controller.Feed)
 	apiRouter.GET("/user/", UserAuth("Query"), controller.UserInfo)
 	apiRouter.POST("/user/register/", controller.Register)
 	apiRouter.POST("/user/login/", controller.Login)
@@ -25,8 +26,8 @@ func InitRouter(r *gin.Engine) {
 	apiRouter.GET("/publish/list/", UserAuth("Query"), controller.PublishList)
 
 	// extra apis - I
-	apiRouter.POST("/favorite/action/", controller.FavoriteAction)
-	apiRouter.GET("/favorite/list/", controller.FavoriteList)
+	apiRouter.POST("/favorite/action/", UserAuth("Query"), controller.FavoriteAction)
+	apiRouter.GET("/favorite/list/", UserAuth("Query"), controller.FavoriteList)
 	apiRouter.POST("/comment/action/", UserAuth("Query"), controller.CommentAction)
 	apiRouter.GET("/comment/list/", UserAuth("Query"), controller.CommentList)
 

@@ -24,7 +24,7 @@ var (
 	ErrGenToken        = &CodeError{errCode: 20002, errMsg: "生成 token 失败", httpCode: http.StatusOK}
 	ErrTokenNotFound   = &CodeError{errCode: 20003, errMsg: "用户 token 不存在或已过期", httpCode: http.StatusOK}
 	ErrTokenValidation = &CodeError{errCode: 20004, errMsg: "用户 token 无效", httpCode: http.StatusOK}
-
+	ErrNotLogin        = &CodeError{errCode: 20005, errMsg: "未登录的用户", httpCode: http.StatusOK}
 	// User模块错误
 	ErrUserNotFound       = &CodeError{errCode: 20101, errMsg: "用户不存在", httpCode: http.StatusOK}
 	ErrUserExist          = &CodeError{errCode: 20102, errMsg: "用户已存在", httpCode: http.StatusOK}
@@ -34,4 +34,11 @@ var (
 
 	// Video模块错误
 	ErrInvaildFile = &CodeError{errCode: 20201, errMsg: "无效的文件，请检查文件", httpCode: http.StatusOK}
+
+	ErrFollowMyself   = &CodeError{errCode: 20301, errMsg: "不能关注或取关自己", httpCode: http.StatusOK}
+	ErrRepeatFollow   = &CodeError{errCode: 20302, errMsg: "不能重复关注", httpCode: http.StatusOK}
+	ErrRepeatDeFollow = &CodeError{errCode: 20303, errMsg: "不能重复取消关注", httpCode: http.StatusOK}
+
+	ErrRepeatThumb   = &CodeError{errCode: 20401, errMsg: "不能重复点赞", httpCode: http.StatusOK}
+	ErrRepeatDeThumb = &CodeError{errCode: 20401, errMsg: "不能重复取消点赞", httpCode: http.StatusOK}
 )

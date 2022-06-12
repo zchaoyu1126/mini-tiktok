@@ -1,40 +1,37 @@
 package controller
 
 import (
-	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 	"mini-tiktok/app/service"
-	"mini-tiktok/common/utils"
-	"mini-tiktok/common/xerr"
 	"net/http"
 	"strconv"
+
+	"github.com/gin-gonic/gin"
 )
 
 type FavouriteVideoResponse struct {
 	response  Response
-	VideoList []service.PublicationVO `json:"video_list"`
+	VideoList []*service.PublicationVO `json:"video_list"`
 }
 
 func FavoriteAction(c *gin.Context) {
-	user, err2 := utils.GetLoginUser(c)
-	if err2 != nil {
-		errorHandler(c, err2)
+	uid, err := getUID(c, true)
+	if err != nil {
+		errorHandler(c, err)
 		return
 	}
-	action := c.Query("action_type")
-	//uid, _ := strconv.Atoi(c.Query("user_id"))
-	target, _ := strconv.Atoi(c.Query("video_id"))
-	ac, _ := strconv.Atoi(action)
-	if ac == 1 {
-		err := service.Thumb(user.UserID, int64(target))
+
+	vid, _ := strconv.ParseInt(c.Query("video_id"), 10, 64)
+	action, _ := strconv.ParseInt(c.Query("action_type"), 10, 64)
+	if action == 1 {
+		err := service.Thumb(uid, vid)
 		if err != nil {
-			c.JSON(http.StatusOK, Response{StatusCode: 1, StatusMsg: "点赞失败"})
+			errorHandler(c, err, "点赞失败")
 			return
 		}
-	} else if ac == 2 {
-		err := service.DeThumb(user.UserID, int64(target))
+	} else if action == 2 {
+		err := service.DeThumb(uid, vid)
 		if err != nil {
-			c.JSON(http.StatusOK, Response{StatusCode: 1, StatusMsg: "取消点赞失败"})
+			errorHandler(c, err, "取消点赞失败")
 			return
 		}
 	}
@@ -42,21 +39,16 @@ func FavoriteAction(c *gin.Context) {
 }
 
 func FavoriteList(c *gin.Context) {
-	user, err2 := utils.GetLoginUser(c)
-	if err2 != nil {
-		errorHandler(c, err2)
+	fromUID, err := getUID(c, false)
+	if err != nil {
+		errorHandler(c, err)
 		return
 	}
-	uid, err := strconv.Atoi(c.Query("user_id"))
+	toUID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
+
+	videos, err := service.FavouriteVideoList(fromUID, toUID)
 	if err != nil {
-		zap.S().Errorf("parse user_id:%v failed", uid)
-		errorHandler(c, xerr.ErrBadRequest)
-		return
-	}
-	videos, err := service.FavouriteVideoList(user.UserID, int64(uid))
-	if err != nil {
-		zap.S().Errorf("get favourite video list:%v failed", uid)
-		errorHandler(c, xerr.ErrDatabase)
+		errorHandler(c, err)
 		return
 	}
 	c.JSON(http.StatusOK, FavouriteVideoResponse{

@@ -35,6 +35,8 @@ func CheckUserNameExist(username string) (bool, error) {
 	return true, nil
 }
 
+// 使用username和password注册，用户名由字母数据下划线英文句号组成，长度要求4-16之间，
+// 密码匹配6-16位英文数据大部分英文标点。
 func Register(username, password string) (int64, string, error) {
 	// 使用正则表达式检验用户输入的用户名和密码是否合法，
 	// 不合法则返回ErrUsernameValidation或ErrPasswordValidation
@@ -81,7 +83,7 @@ func Register(username, password string) (int64, string, error) {
 	}
 
 	// 将用户信息存储在mysql中
-	if err := dao.UserAdd(user); err != nil {
+	if err := dao.UserCreate(user); err != nil {
 		return 0, "", err
 	}
 
@@ -98,6 +100,7 @@ func Register(username, password string) (int64, string, error) {
 	return user.UserID, token, nil
 }
 
+// 用户注册，注册完毕后返回token
 func Login(username, password string) (int64, string, error) {
 	// 使用redis查询用户名是否存在，如果不存在则直接返回ErrUserNotFound错误
 	exist, err := db.NewRedisDaoInstance().IsUserNameExist(username)
@@ -129,10 +132,9 @@ func Login(username, password string) (int64, string, error) {
 	return user.UserID, token, nil
 }
 
-// fromUserID wants to look over toUserID's user information.
-func UserInfo(toUserID, fromUserID int64) (*UserVO, error) {
-
-	user := &entity.User{UserID: toUserID}
+// fromUID查看toUID的用户信息
+func UserInfo(toUID, fromUID int64) (*UserVO, error) {
+	user := &entity.User{UserID: toUID}
 	// 查询想查看的用户是否存在
 	if err := dao.UserGetByUID(user); err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
@@ -141,21 +143,25 @@ func UserInfo(toUserID, fromUserID int64) (*UserVO, error) {
 		return nil, err
 	}
 
-	// query like table, check fromUserID is follow toUserID or not
-	follow := &entity.Follow{FromUserID: fromUserID, ToUserID: toUserID}
+	// 如果是查看自己的信息，或者是游客查看别人的信息
+	if fromUID == toUID || fromUID == -1 {
+		return &UserVO{user.UserID, user.UserName, user.FollowCount, user.FollowerCount, false}, nil
+	}
+
+	// 查询follow表，fromUID是否关注了toUID
 	var isFollow bool
-	if fromUserID == toUserID {
-		isFollow = false
-	} else {
-		if err := dao.FollowGetByIDs(follow); err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				isFollow = false
-			} else if err != nil {
-				return nil, err
-			}
+	follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID}
+	err := dao.FollowGetByIDs(follow)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			// 如果错误是ErrRecordNotFound
+			isFollow = false
+		} else if err != nil {
+			return nil, err
 		}
+	} else {
 		isFollow = follow.IsFollow
 	}
-	userDTO := &UserVO{user.UserID, user.UserName, user.FollowCount, user.FollowerCount, isFollow}
-	return userDTO, nil
+	userVO := &UserVO{user.UserID, user.UserName, user.FollowCount, user.FollowerCount, isFollow}
+	return userVO, nil
 }

@@ -1,7 +1,6 @@
 package router
 
 import (
-	"fmt"
 	"mini-tiktok/common/db"
 	"mini-tiktok/common/xerr"
 	"net"
@@ -41,11 +40,11 @@ func UserAuth(method string) gin.HandlerFunc {
 		} else if method == "Query" {
 			token = c.Query("token")
 		}
-		fmt.Println("hihi", token)
+
 		// 未携带有效的token
 		if token == "" {
-			errorHandler(c, xerr.ErrTokenValidation)
-			c.Abort()
+			c.Set("uid", int64(-1))
+			c.Next()
 			return
 		}
 

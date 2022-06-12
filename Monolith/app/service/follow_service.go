@@ -2,119 +2,90 @@ package service
 
 import (
 	"errors"
-	"fmt"
 	"mini-tiktok/app/dao"
 	"mini-tiktok/app/entity"
+	"mini-tiktok/common/xerr"
 
 	"gorm.io/gorm"
 )
 
-func RelationAction(fromUID, toUID int64, actionType int64) error {
-	if actionType == 1 {
-		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID, IsFollow: true}
-		// 查询记录follow记录是否存在
-		err := dao.FollowGetByIDs(follow)
-		if err != nil {
-			if errors.Is(err, gorm.ErrRecordNotFound) {
-				// 如果记录不存在就创建，创建失败则返回nerr，成功则返回nil
-				if nerr := dao.FollowAdd(follow); nerr != nil {
-					return nerr
-				}
-				return nil
-			} else {
-				// 查询失败，返回错误
-				return err
-			}
-		}
-
-		// 记录存在的情况
+// fromUID 关注 toUID
+func Follow(fromUID, toUID int64) error {
+	// 查询这条记录follow记录是否存在
+	follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID}
+	err := dao.FollowGetByIDs(follow)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// 记录不存在时创建，创建失败则返回nerr，成功则返回nil
 		follow.IsFollow = true
-		if err := dao.FollowUpdate(follow); err != nil {
-			return err
-		}
-		if err := UpdateUserFollowCount(fromUID, 1); err != nil {
-			return err
-		}
-		if err := UpdateUserFollowerCount(toUID, 1); err != nil {
-			return err
+		terr := dao.TxFollowCreate(follow)
+		if terr != nil {
+			return terr
 		}
 		return nil
-	} else if actionType == 2 {
-		// 取消关注，说明数据库中一定是有记录的
-		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID}
-		if err := dao.FollowGetByIDs(follow); err != nil {
-			return nil
-		}
-		follow.IsFollow = false
-		if err := dao.FollowUpdate(follow); err != nil {
-			return err
-		}
-		if err := UpdateUserFollowCount(fromUID, -1); err != nil {
-			return err
-		}
-		if err := UpdateUserFollowerCount(toUID, -1); err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func UpdateUserFollowCount(userID, delta int64) error {
-	user := &entity.User{UserID: userID}
-	if err := dao.UserGetByUID(user); err != nil {
-		return err
-	}
-	user.FollowCount += delta
-	if err := dao.UserUpdate(user); err != nil {
-		return err
-	}
-	return nil
-}
-
-func UpdateUserFollowerCount(userID, delta int64) error {
-	user := &entity.User{UserID: userID}
-	if err := dao.UserGetByUID(user); err != nil {
-		return err
-	}
-	user.FollowerCount += delta
-	if err := dao.UserUpdate(user); err != nil {
-		return err
-	}
-	return nil
-}
-
-// 查询user的关注列表
-func FollowList(userID, uid int64) ([]UserVO, error) {
-	var follows []entity.Follow
-	err := dao.FollowGetByFromUID(userID, &follows)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
 	} else if err != nil {
+		// 查询失败，返回错误
+		return err
+	}
+
+	// 记录存在的情况
+	if follow.IsFollow {
+		return xerr.ErrRepeatFollow
+	}
+
+	follow.IsFollow = true
+	// 使用事务更新关注表，同时增加粉丝数和关注数
+	if err := dao.TxFollowUpdate(follow); err != nil {
+		return err
+	}
+	return nil
+}
+
+// fromUID 取消关注 UID
+func DeFollow(fromUID, toUID int64) error {
+	// follow这条记录必定存在
+	follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID}
+	if err := dao.FollowGetByIDs(follow); err != nil {
+		return nil
+	}
+
+	if !follow.IsFollow {
+		return xerr.ErrRepeatDeFollow
+	}
+
+	follow.IsFollow = false
+	// 使用事务更新关注表，同时减少粉丝数和关注数
+	if err := dao.TxFollowUpdate(follow); err != nil {
+		return err
+	}
+	return nil
+}
+
+// fromUID查看toUID的关注列表
+func FollowList(toUID, fromUID int64) ([]*UserVO, error) {
+	var follows []*entity.Follow
+	if err := dao.FollowGetByFromUID(toUID, &follows); err != nil {
 		return nil, err
 	}
 
-	userList := make([]UserVO, len(follows))
+	userList := make([]*UserVO, len(follows))
 	for i, follow := range follows {
-		user, _ := UserInfo(follow.ToUserID, uid)
-		userList[i] = *user
+		user, _ := UserInfo(follow.ToUserID, fromUID)
+		userList[i] = user
 	}
 	return userList, nil
 }
 
-func FollowerList(userID, uid int64) ([]UserVO, error) {
-	var follows []entity.Follow
-	err := dao.FollowGetByToUID(userID, &follows)
-	if errors.Is(err, gorm.ErrRecordNotFound) {
-		return nil, nil
-	} else if err != nil {
+// fromUID查看toUID的粉丝列表
+func FollowerList(toUID, fromUID int64) ([]*UserVO, error) {
+	var follows []*entity.Follow
+	if err := dao.FollowGetByToUID(toUID, &follows); err != nil {
 		return nil, err
 	}
 
-	userList := make([]UserVO, len(follows))
-	fmt.Println(len(follows))
+	userList := make([]*UserVO, len(follows))
 	for i, follow := range follows {
-		user, _ := UserInfo(follow.FromUserID, uid)
-		userList[i] = *user
+		user, _ := UserInfo(follow.FromUserID, fromUID)
+		userList[i] = user
 	}
 	return userList, nil
 }

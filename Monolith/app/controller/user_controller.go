@@ -7,7 +7,6 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
 type UserLoginResponse struct {
@@ -56,26 +55,19 @@ func Login(c *gin.Context) {
 	})
 }
 
-// 用户信息
+// 查看用户信息
 func UserInfo(c *gin.Context) {
-	// 获取Query参数 user_id, user_id解析失败时返回ErrBadRequest错误
-	toUserIDTmp := c.Query("user_id")
-	toUserID, err := strconv.ParseInt(toUserIDTmp, 10, 64)
+	// fromUID查看toUID的用户信息
+	// toUID由query参数中的user_id获得
+	// fromUID从userauth中间件的写入的"uid"参数获得，已被封装在getUID函数中
+	toUID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
+	fromUID, err := getUID(c, false)
 	if err != nil {
-		zap.S().Errorf("parse user_id:%v failed", toUserIDTmp)
-		errorHandler(c, xerr.ErrBadRequest)
-	}
-
-	// 获取经过路由中间件UserAuthMiddlerWare解析后又写入的fromUserID信息
-	fromUIDTmp, exists := c.Get("uid")
-	fromUID, ok := fromUIDTmp.(int64)
-	if !exists || !ok {
-		zap.S().Errorf("parse fromUserID:%v failed", fromUIDTmp)
 		errorHandler(c, xerr.ErrBadRequest)
 		return
 	}
 
-	user, err := service.UserInfo(toUserID, fromUID)
+	user, err := service.UserInfo(toUID, fromUID)
 	if err != nil {
 		errorHandler(c, err)
 		return

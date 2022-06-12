@@ -11,28 +11,28 @@ import (
 
 type UserListResponse struct {
 	Response
-	UserList []service.UserVO `json:"user_list"`
+	UserList []*service.UserVO `json:"user_list"`
 }
 
 func RelationAction(c *gin.Context) {
-	toUIDTmp := c.Query("to_user_id")
-	actionTypeTmp := c.Query("action_type")
-	fromUIDTmp, _ := c.Get("uid")
-	fromUID, _ := fromUIDTmp.(int64)
-
-	toUID, err := strconv.ParseInt(toUIDTmp, 10, 64)
+	toUID, _ := strconv.ParseInt(c.Query("to_user_id"), 10, 64)
+	actionType, _ := strconv.ParseInt(c.Query("action_type"), 10, 64)
+	fromUID, err := getUID(c, true)
 	if err != nil {
-		errorHandler(c, xerr.ErrBadRequest)
+		errorHandler(c, err)
 		return
 	}
 
-	actionType, err := strconv.ParseInt(actionTypeTmp, 10, 64)
-	if err != nil {
-		errorHandler(c, xerr.ErrBadRequest)
+	if fromUID == toUID {
+		errorHandler(c, xerr.ErrFollowMyself)
 		return
 	}
 
-	err = service.RelationAction(fromUID, toUID, actionType)
+	if actionType == 1 {
+		err = service.Follow(fromUID, toUID)
+	} else if actionType == 2 {
+		err = service.DeFollow(fromUID, toUID)
+	}
 	if err != nil {
 		errorHandler(c, err)
 		return
@@ -42,12 +42,14 @@ func RelationAction(c *gin.Context) {
 }
 
 func FollowList(c *gin.Context) {
-	userIDTmp := c.Query("user_id")
-	uidTmp, _ := c.Get("uid")
-	userID, _ := strconv.ParseInt(userIDTmp, 10, 64)
-	uid, _ := uidTmp.(int64)
+	toUID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
+	fromUID, err := getUID(c, false)
+	if err != nil {
+		errorHandler(c, err)
+		return
+	}
 
-	list, err := service.FollowList(userID, uid)
+	list, err := service.FollowList(toUID, fromUID)
 	if err != nil {
 		errorHandler(c, err)
 		return
@@ -59,12 +61,14 @@ func FollowList(c *gin.Context) {
 }
 
 func FollowerList(c *gin.Context) {
-	userIDTmp := c.Query("user_id")
-	uidTmp, _ := c.Get("uid")
-	userID, _ := strconv.ParseInt(userIDTmp, 10, 64)
-	uid, _ := uidTmp.(int64)
+	toUID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
+	fromUID, err := getUID(c, false)
+	if err != nil {
+		errorHandler(c, err)
+		return
+	}
 
-	list, err := service.FollowerList(userID, uid)
+	list, err := service.FollowerList(toUID, fromUID)
 	if err != nil {
 		errorHandler(c, err)
 		return

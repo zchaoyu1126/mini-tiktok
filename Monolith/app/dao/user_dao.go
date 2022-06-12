@@ -9,7 +9,8 @@ import (
 	"gorm.io/gorm"
 )
 
-func UserAdd(user *entity.User) error {
+// 新建一个用户
+func UserCreate(user *entity.User) error {
 	if err := mysqlDB.Create(user).Error; err != nil {
 		zap.L().Error("mysql:users create new user failed")
 		return xerr.ErrDatabase
@@ -17,7 +18,7 @@ func UserAdd(user *entity.User) error {
 	return nil
 }
 
-// 除用户不存在导致的err外，其余所有的error情况都直接返回ErrDatabase
+// 根据用户的username获取用户记录，除用户不存在导致的err外，其余所有的error情况都直接返回ErrDatabase
 func UserGetByName(user *entity.User) error {
 	if err := mysqlDB.Where("username=?", user.UserName).First(user).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -29,6 +30,7 @@ func UserGetByName(user *entity.User) error {
 	return nil
 }
 
+// 根据用户的userid获取用户记录，除用户不存在导致的err外，其余所有的error情况都直接返回ErrDatabase
 func UserGetByUID(user *entity.User) error {
 	if err := mysqlDB.Where("user_id=?", user.UserID).First(user).Error; err != nil {
 		if !errors.Is(err, gorm.ErrRecordNotFound) {
@@ -36,14 +38,6 @@ func UserGetByUID(user *entity.User) error {
 			return xerr.ErrDatabase
 		}
 		return err
-	}
-	return nil
-}
-
-func UserUpdate(user *entity.User) error {
-	if err := mysqlDB.Save(user).Error; err != nil {
-		zap.L().Error("mysql:users update user failed")
-		return xerr.ErrDatabase
 	}
 	return nil
 }

@@ -2,97 +2,67 @@ package controller
 
 import (
 	"mini-tiktok/app/service"
-	"mini-tiktok/common/db"
 	"mini-tiktok/common/xerr"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"go.uber.org/zap"
 )
 
-type VideoResponse struct {
+type VideoListResponse struct {
 	Response
-	VideoList []service.PublicationVO `json:"video_list"`
+	VideoList []*service.PublicationVO `json:"video_list"`
 }
 
 type FeedResponse struct {
 	Response
-	NextTime  int                     `json:"next_time"`
-	VideoList []service.PublicationVO `json:"video_list"`
+	NextTime  int                      `json:"next_time"`
+	VideoList []*service.PublicationVO `json:"video_list"`
 }
 
+// 查看用户发布视频列表接口
 func PublishList(c *gin.Context) {
-	fromUIDTmp, exists := c.Get("uid")
-	fromUID, ok := fromUIDTmp.(int64)
-	if !exists || !ok {
-		zap.S().Errorf("parse fromUserID:%v failed", fromUIDTmp)
-		errorHandler(c, xerr.ErrBadRequest)
-		return
-	}
-	userId := c.Query("user_id")
-	uid, err := strconv.Atoi(userId)
+	fromUID, err := getUID(c, false)
 	if err != nil {
-		zap.S().Errorf("parse user_id:%v failed", uid)
-		errorHandler(c, xerr.ErrBadRequest)
+		errorHandler(c, err)
 		return
 	}
-	videos, err := service.GetVideoListByUser(int64(uid), fromUID)
+	toUID, _ := strconv.ParseInt(c.Query("user_id"), 10, 64)
+
+	videos, err := service.GetVideoListByUser(toUID, fromUID)
 	if err != nil {
 		errorHandler(c, err)
 		return
 	}
 
-	c.JSON(http.StatusOK, VideoResponse{
+	c.JSON(http.StatusOK, VideoListResponse{
 		success,
 		videos,
 	})
 }
 
-// Publish 待解决问题 token鉴权，没有判断上传的是否为视频/*
+// 用户发布视频接口
 func Publish(c *gin.Context) {
-	// 获取参数
-	file, err := c.FormFile("data")
-	title := c.PostForm("title")
-	// file, header, err := c.Request.FormFile("data")
-	// //token := c.Request.Form.Get("token")
-	// title := c.Request.Form.Get("title")
+	uid, err := getUID(c, true)
 	if err != nil {
+		errorHandler(c, err)
+		return
+	}
+
+	title := c.PostForm("title")
+	file, err := c.FormFile("data")
+	// 仅支持上传mp4后缀文件
+	if err != nil || !strings.HasSuffix(file.Filename, "mp4") {
 		errorHandler(c, xerr.ErrInvaildFile)
 		return
 	}
-	filepath := "upload/videos/" + file.Filename
-	c.SaveUploadedFile(file, filepath)
 
-	uidTmp, exists := c.Get("uid")
-	uid, ok := uidTmp.(int64)
-	if !exists || !ok {
-		zap.S().Errorf("parse fromUserID:%v failed", uidTmp)
-		errorHandler(c, xerr.ErrBadRequest)
-		return
-	}
+	videoPath := savePath(file.Filename)
+	c.SaveUploadedFile(file, videoPath)
 
-	// out, err := os.Create(filepath)
-	// if err != nil {
-	// 	zap.L().Error("create video file failed")
-	// 	errorHandler(c, xerr.ErrInternalServer)
-	// 	return
-	// }
-	// defer out.Close()
-
-	// _, err = io.Copy(out, file)
-	// if err != nil {
-	// 	zap.L().Error("copy video file failed")
-	// 	errorHandler(c, xerr.ErrInternalServer)
-	// 	return
-	// }
-
-	// 模拟器的地址
-	// url := "http://10.0.2.2:8079/" + filepath
-	// 服务器上
-	url := "http://39.107.81.188:8079/" + filepath
-	err = service.VideoPublish(url, title, uid)
+	err = service.VideoPublish(videoPath, title, uid)
 	if err != nil {
 		errorHandler(c, err)
 		return
@@ -101,17 +71,16 @@ func Publish(c *gin.Context) {
 	c.JSON(http.StatusOK, success)
 }
 
+// 视频流接口
 func Feed(c *gin.Context) {
+	uid, err := getUID(c, false)
+	if err != nil {
+		errorHandler(c, err)
+		return
+	}
 	lastest := c.Query("latest_time")
 	if lastest == "" {
 		lastest = time.Now().Format("2006-01-02 15:04:05")
-	}
-	token := c.Query("token")
-	var uid int64
-	if token == "" {
-		uid = -1
-	} else {
-		uid, _ = db.NewRedisDaoInstance().GetToken(token)
 	}
 
 	nextTime, videos, err := service.Feed(lastest, uid)
@@ -119,9 +88,20 @@ func Feed(c *gin.Context) {
 		errorHandler(c, err)
 		return
 	}
+
 	c.JSON(http.StatusOK, FeedResponse{
 		success,
 		nextTime,
 		videos,
 	})
+}
+
+// 用户上传视频的保存路径为 upload/videos/timestamp_filename
+func savePath(fileName string) string {
+	var builder strings.Builder
+	builder.WriteString("upload/videos/")
+	timeStamp := strconv.Itoa(int(time.Now().Unix()))
+	builder.WriteString(timeStamp)
+	builder.WriteString("_" + fileName)
+	return builder.String()
 }

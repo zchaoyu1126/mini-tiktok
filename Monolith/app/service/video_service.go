@@ -1,73 +1,71 @@
 package service
 
 import (
+	"errors"
 	"mini-tiktok/app/dao"
 	"mini-tiktok/app/entity"
 	"mini-tiktok/common/utils"
 	"mini-tiktok/common/xerr"
+	"strconv"
+	"strings"
+	"time"
+
+	ffmpeg "github.com/u2takey/ffmpeg-go"
+	"gorm.io/gorm"
 )
 
 type PublicationVO struct {
 	ID             int64   `json:"id"`
 	Author         *UserVO `json:"author"`
 	PlayUrl        string  `json:"play_url"`
-	CoverUrl       string
-	FavouriteCount int
-	CommentCount   int
-	IsFavourite    bool
-	Title          string
+	CoverUrl       string  `json:"cover_url"`
+	FavouriteCount int     `json:"favourite_count"`
+	CommentCount   int     `json:"comment_count"`
+	IsFavourite    bool    `json:"is_favourite"`
+	Title          string  `json:"titile"`
 }
 
-func GetVideoListByUser(toUID, fromUID int64) ([]PublicationVO, error) {
-	var videos []entity.Publication
-	var ret []PublicationVO
-	// 查询是否关注了该作者
-	isFollow := false
-	if toUID != fromUID {
-		follow := &entity.Follow{FromUserID: fromUID, ToUserID: toUID}
-		if err := dao.FollowGetByIDs(follow); err != nil {
-			return nil, err
-		}
-		isFollow = follow.IsFollow
-	}
+// fromUID查看toUID的视频列表
+func GetVideoListByUser(toUID, fromUID int64) ([]*PublicationVO, error) {
+	var videos []*entity.Publication
+	var ret []*PublicationVO
 
-	// 查询作者信息
-	owner := &entity.User{UserID: fromUID}
-	if err := dao.UserGetByUID(owner); err != nil {
-		return nil, err
-	}
-	// 组装UserVO
-	author := &UserVO{owner.ID, owner.UserName, owner.FollowCount, owner.FollowerCount, isFollow}
-
+	// 获取视频列表
 	if err := dao.VideoGetByUser(toUID, &videos); err != nil {
 		return nil, err
 	}
 
-	for _, v := range videos {
-		vo, err := VideoWithFavouriteTransform(&v, fromUID)
+	// 组装视频VO，需要加上fromUID是否点赞了该视频，以及该视频的作者信息
+	ret = make([]*PublicationVO, len(videos))
+	for i, v := range videos {
+		vo, err := VideoTransform(v, fromUID)
 		if err != nil {
 			return nil, err
 		}
-		vo.Author = author
-		ret = append(ret, vo)
+		ret[i] = vo
 	}
 	return ret, nil
 }
 
-func VideoPublish(filepath, title string, uid int64) error {
+func VideoPublish(filePath, title string, uid int64) error {
+	host := "http://10.0.2.2:8079/"
+	// host := "http://39.107.81.188:8079/"
+
 	flake, err := utils.NewSnowFlake(1, 1)
 	if err != nil {
 		return xerr.ErrInternalServer
 	}
 	vid, _ := flake.NextId()
 
-	// 需要生成封面
-	err = dao.VideoAdd(&entity.Publication{
+	coverPath := savePath()
+	extractFrame(filePath, coverPath)
+
+	err = dao.VideoCreate(&entity.Publication{
 		VideoID:  vid,
 		OwnerID:  uid,
 		Title:    title,
-		PlayUrl:  filepath,
-		CoverUrl: "",
+		PlayUrl:  host + filePath,
+		CoverUrl: host + coverPath,
 	})
 
 	if err != nil {
@@ -76,12 +74,8 @@ func VideoPublish(filepath, title string, uid int64) error {
 	return nil
 }
 
-func VideoTransform(v *entity.Publication) (PublicationVO, error) {
-	return VideoWithFavouriteTransform(v, -1)
-}
-
-func VideoWithFavouriteTransform(v *entity.Publication, uid int64) (PublicationVO, error) {
-	vo := PublicationVO{
+func VideoTransform(v *entity.Publication, uid int64) (*PublicationVO, error) {
+	vo := &PublicationVO{
 		ID:             v.VideoID,
 		PlayUrl:        v.PlayUrl,
 		CoverUrl:       v.CoverUrl,
@@ -89,39 +83,72 @@ func VideoWithFavouriteTransform(v *entity.Publication, uid int64) (PublicationV
 		CommentCount:   v.CommentCount,
 		Title:          v.Title,
 	}
-	var favourite entity.Favourite
-	if uid != -1 {
-		err := dao.FavouriteGetByVideoUser(&favourite, uid, v.VideoID)
-		if err != nil {
-			return PublicationVO{}, err
-		}
+
+	// 查询作者信息
+	author, err := UserInfo(v.OwnerID, uid)
+	if err != nil {
+		return nil, err
 	}
-	vo.IsFavourite = favourite.IsFavourite == 1
+	vo.Author = author
+
+	res, err := isFavourite(uid, v.VideoID)
+	if err != nil {
+		return nil, err
+	}
+	vo.IsFavourite = res
 	return vo, nil
 }
 
-func Feed(lastest string, uid int64) (int, []PublicationVO, error) {
-	var videos []entity.Publication
-	var ret []PublicationVO
-	if err := dao.VideoList(&videos); err != nil {
-		return 0, []PublicationVO{}, err
-	}
+func Feed(lastest string, uid int64) (int, []*PublicationVO, error) {
+	var videos []*entity.Publication
+	var ret []*PublicationVO
 
-	for _, v := range videos {
-		if uid == -1 {
-			uid = v.OwnerID
-		}
+	if err := dao.VideoList(&videos); err != nil {
+		return 0, nil, err
+	}
+	ret = make([]*PublicationVO, len(videos))
+	for i, v := range videos {
 		author, _ := UserInfo(v.OwnerID, uid)
-		ret = append(ret, PublicationVO{
-			ID:             v.VideoID,
-			PlayUrl:        v.PlayUrl,
-			CoverUrl:       v.CoverUrl,
-			FavouriteCount: v.FavouriteCount,
-			CommentCount:   v.CommentCount,
-			Title:          v.Title,
-			Author:         author,
-		})
+		vo, err := VideoTransform(v, uid)
+		if err != nil {
+			return 0, nil, err
+		}
+		vo.Author = author
+		ret[i] = vo
 	}
 
 	return 0, ret, nil
+}
+
+// 查看uid是否点赞了vid视频
+func isFavourite(uid, vid int64) (bool, error) {
+	if uid == -1 {
+		return false, nil
+	}
+	favourite := &entity.Favourite{UserID: uid, VideoID: vid}
+	err := dao.FavouriteGetByIDs(favourite)
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		return false, nil
+	} else if err != nil {
+		return false, err
+	}
+	return favourite.IsFavourite, nil
+}
+
+func extractFrame(videoPath string, framePath string) error {
+	err := ffmpeg.Input(videoPath).
+		Output(framePath, ffmpeg.KwArgs{
+			"vframes": "20",
+		}).
+		OverWriteOutput().
+		Run()
+	return err
+}
+
+func savePath() string {
+	var builder strings.Builder
+	builder.WriteString("upload/videos/")
+	builder.WriteString(strconv.Itoa(int(time.Now().Unix())))
+	builder.WriteString(".jpg")
+	return builder.String()
 }

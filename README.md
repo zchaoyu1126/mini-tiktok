@@ -6,7 +6,19 @@ This repository is the result of Team BDXA0429.
 
 For Monolith, we choose gin+gorm+mysql+redis+mvc framework to complete the work.
 
+
+
+## Microservices
+
+in future planning
+
+
+
 ## Monolith
+
+### DOC
+
+https://v9drif9kn4.feishu.cn/docx/doxcnnC7wuakE7YrDcYuNGrF7LZ
 
 ### Project structure
 
@@ -18,15 +30,15 @@ Monolith
 │   └── entity             
 |   └── dao
 ├── common
-│   ├── auth              
-│   ├── config            
+│   ├── auth              // generate token           
 │   ├── db                // mysql & redis init
-│   ├── errors            // customed errors
+│   ├── xerr              // customed errors
 │   ├── logger            
-│   └── utils             
+│   └── utils             // snow flake algorithm to generate unique id
 ├── router                
-│   ├── middleware        
+│   ├── middleware        // auth and log midderware 
 │   └── router.go
+├── config.yaml           // app config
 ├── go.mod                
 ├── go.sum
 ├── main.go               
@@ -39,7 +51,7 @@ Monolith
 
 The mysql installation tutorial is omitted here.
 
-Notice: you need replace the `mysql_word` with your own password.
+Notice: you need replace the `mysql_password` with your own password.
 
 ![image-20220527204317266](./assets/mysql.png)
 
@@ -58,7 +70,28 @@ make PREFIX=/usr/local/redis install
 ./bin/redis-server&
 ```
 
-#### 3. Build an run
+#### 3. Install ffmpeg
+
+```shell
+wget http://www.tortall.net/projects/yasm/releases/yasm-1.3.0.tar.gz
+tar zxvf yasm-1.3.0.tar.gz
+cd yasm-1.3.0
+./configure
+make
+sudo make install
+
+
+wget http://www.ffmpeg.org/releases/ffmpeg-3.1.tar.gz
+tar -zxvf ffmpeg-3.1.tar.gz
+cd ffmpeg-3.1
+./configure --prefix=/usr/local/ffmpeg
+make && sudo make install
+vim /etc/profile
+export PATH=$PATH:/usr/local/ffmpeg/bin
+source /etc/profile
+```
+
+#### 4. Build an run
 
 ```shell
 git clone https://github.com/zchaoyu1126/mini-tiktok.git
@@ -100,25 +133,5 @@ service mini-tiktok stop
 service mini-tiktok status
 ```
 
-### Needs to be done
 
-- [x] use snow flake to generate user_id
-
-- [x] use `sha256(user_id-timestamp)` to generate token 
-
-- [x] use redis to store token.
-
-- [x] use redis to store username to speed up the operation of querying whether the user name exists.
-
-- [ ] set token expire time
-
-- [ ] init redis when the system start.
-
-- [ ] user logout, delete token
-
-- [ ] custom errors
-
-- [ ] add logger
-
-  
 

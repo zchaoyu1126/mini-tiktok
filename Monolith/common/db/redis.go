@@ -1,13 +1,14 @@
 package db
 
 import (
-	"github.com/go-redis/redis"
-	"go.uber.org/zap"
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"mini-tiktok/common/xerr"
 	"strconv"
 	"sync"
+
+	"github.com/go-redis/redis"
+	"go.uber.org/zap"
+	"gopkg.in/yaml.v2"
 )
 
 // Redis Configure Struct
@@ -111,6 +112,7 @@ func (r *RedisConn) IsTokenValid(token string) (bool, error) {
 	return true, nil
 }
 
+// add username to username cache
 func (r *RedisConn) AddToNameList(username string) error {
 	err := r.rdb.SAdd("namelist", username).Err()
 	if err != nil {
@@ -120,6 +122,7 @@ func (r *RedisConn) AddToNameList(username string) error {
 	return nil
 }
 
+// check username in cache or not
 func (r *RedisConn) IsUserNameExist(username string) (bool, error) {
 	exist, err := r.rdb.SIsMember("namelist", username).Result()
 	if err != nil {

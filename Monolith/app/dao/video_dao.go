@@ -30,7 +30,7 @@ func VideoGetByUser(userID int64, videoList *[]*entity.Publication) error {
 
 // 返回所有的视频
 func VideoList(videoList *[]*entity.Publication) error {
-	err := mysqlDB.Find(&videoList).Error
+	err := mysqlDB.Order("id desc").Find(&videoList).Error
 	if err != nil {
 		zap.S().Errorf("mysql:publications get video list failed%w", err)
 		return xerr.ErrDatabase

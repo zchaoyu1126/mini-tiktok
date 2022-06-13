@@ -9,19 +9,24 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-func init() {
-
-}
-func main() {
+func appServer() {
 	utils.CreateDir("upload/videos/")
 	utils.CreateDir("upload/covers/")
 
 	r := gin.New()
 	router.InitRouter(r)
+	r.Run()
+}
 
-	// 开一个文件服务器
+func fileServer() {
 	http.Handle("/", http.FileServer(http.Dir("./")))
 
 	go http.ListenAndServe(":8079", nil)
-	r.Run() // listen and serve on 0.0.0.0:8080 (for windows "localhost:8080")
+}
+func main() {
+
+	go fileServer()
+	go appServer()
+
+	select {}
 }

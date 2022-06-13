@@ -46,12 +46,16 @@ func DeThumb(uid int64, vid int64) error {
 		UserID:  uid,
 		VideoID: vid,
 	}
+	err := dao.FavouriteGetByIDs(favourite)
+	if err != nil {
+		return err
+	}
 
 	if !favourite.IsFavourite {
 		return xerr.ErrRepeatDeThumb
 	}
 	favourite.IsFavourite = false
-	err := dao.TxFavouriteUpdate(favourite)
+	err = dao.TxFavouriteUpdate(favourite)
 	if err != nil {
 		return err
 	}

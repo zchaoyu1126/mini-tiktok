@@ -109,7 +109,7 @@ func TxFollowUpdate(follow *entity.Follow) error {
 	}
 
 	toUser := &entity.User{}
-	if err := tx.Where("user_id = ? ", follow.ToUserID).First(fromUser).Error; err != nil {
+	if err := tx.Where("user_id = ? ", follow.ToUserID).First(toUser).Error; err != nil {
 		zap.L().Error("mysql:transaction(follow update) query to user failed")
 		tx.Rollback()
 		return xerr.ErrDatabase

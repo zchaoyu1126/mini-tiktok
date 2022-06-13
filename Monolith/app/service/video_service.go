@@ -48,8 +48,8 @@ func GetVideoListByUser(toUID, fromUID int64) ([]*PublicationVO, error) {
 }
 
 func VideoPublish(filePath, title string, uid int64) error {
-	host := "http://10.0.2.2:8079/"
-	// host := "http://39.107.81.188:8079/"
+	//host := "http://10.0.2.2:8079/"
+	host := "http://39.107.81.188:8079/"
 
 	flake, err := utils.NewSnowFlake(1, 1)
 	if err != nil {

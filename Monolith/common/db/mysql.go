@@ -52,7 +52,6 @@ func InitMySql() *gorm.DB {
 		conf.Port,
 		conf.DbName,
 	)
-	fmt.Println(dsn)
 	db, err := gorm.Open(mysql.Open(dsn), &gorm.Config{})
 	if err != nil {
 		zap.L().Fatal("mysql database init failed")
